@@ -1,0 +1,93 @@
+{
+  "properties": {
+    "dataCollectionEndpointId": "/subscriptions/35ea681f-c2cd-4a81-aed3-c2087465d1f3/resourceGroups/datafy-dp-dm-dev-nc/providers/Microsoft.Insights/dataCollectionEndpoints/k8slogsncdev",
+    "streamDeclarations": {
+      "Custom-fluentbit-json-stream": {
+        "columns": [
+          {
+            "name": "TimeGenerated",
+            "type": "datetime"
+          },
+          {
+            "name": "time",
+            "type": "datetime"
+          },
+          {
+            "name": "kubernetes_pod_name",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_pod_id",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_namespace",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_host",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_docker_id",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_container_image",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_container_name",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_container_hash",
+            "type": "string"
+          },
+          {
+            "name": "log",
+            "type": "string"
+          },
+          {
+            "name": "stream",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "dataSources": {
+      "fluentbitLogFiles": [
+        {
+          "streams": [
+            "Custom-fluentbit-json-stream"
+          ],
+          "format": "json",
+          "name": "fluentbit-json-file",
+          "settings": {
+            "text": {
+              "recordStartTimestampFormat": "yyyy-MM-ddTHH:mm:ssk"
+            }
+          }
+        }
+      ]
+    },
+    "destinations": {
+      "logAnalytics": [{
+        "workspaceResourceId": "/subscriptions/35ea681f-c2cd-4a81-aed3-c2087465d1f3/resourceGroups/datafy-dp-dm-dev-nc/providers/Microsoft.OperationalInsights/workspaces/datafy-dp-deva-nc-dev",
+        "name": "myWorkspace"
+      }]
+    },
+    "dataFlows": [
+      {
+        "streams": [
+          "Custom-fluentbit-json-stream"
+        ],
+        "transformKql": "source",
+        "destinations": [
+          "myWorkspace"
+        ],
+        "outputStream": "Custom-fluentbit_CL"
+      }
+    ]
+  }
+}
