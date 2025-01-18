@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/pkg/errors"
+	"os"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -10,29 +13,29 @@ import (
 )
 
 // logs ingestion URI
-const endpoint = "https://k8slogsncdev-pfzu.westeurope-1.ingest.monitor.azure.com"
+var endpoint = ""
 
 // data collection rule (DCR) immutable ID
-const ruleID = "dcr-89086b086dce443da28f0c304e7d49fb"
+var ruleID = ""
 
 // stream name in the DCR that represents the destination table
-const streamName = "Custom-fluentbit-json-stream"
+var streamName = ""
 
 // Tenant ID for the Azure AD application
-const tenantID = ""
+var tenantID = ""
 
 // Client secret of the Azure AD application with access to the DCR
-const clientSecret = ""
+var clientSecret = ""
 
 // Client ID of the Azure AD application with access to the DCR
-const clientID = ""
+var clientID = ""
 
 type FluentBitLog struct {
 	TimeGenerated            time.Time `json:"TimeGenerated"`
 	Time                     time.Time `json:"time"`
 	KubernetesPodName        string    `json:"kubernetes_pod_name"`
 	KubernetesPodId          string    `json:"kubernetes_pod_id"`
-	KubernetesNamespace      string    `json:"kubernetes_namespace"`
+	KubernetesNamespaceName  string    `json:"kubernetes_namespace_name"`
 	KubernetesHost           string    `json:"kubernetes_host"`
 	KubernetesDockerId       string    `json:"kubernetes_docker_id"`
 	KubernetesContainerName  string    `json:"kubernetes_container_name"`
@@ -43,6 +46,7 @@ type FluentBitLog struct {
 }
 
 func main() {
+	readDotEnvFile()
 	var cred, err = azidentity.NewClientSecretCredential(tenantID, clientID, clientSecret, nil)
 	if err != nil {
 		panic(err)
@@ -59,7 +63,7 @@ func main() {
 		data = append(data, FluentBitLog{
 			Time:                     time.Now().UTC(),
 			TimeGenerated:            time.Now().UTC(),
-			KubernetesNamespace:      "default",
+			KubernetesNamespaceName:  "default",
 			KubernetesContainerHash:  "someHash",
 			KubernetesPodId:          "podId",
 			Log:                      "someLog",
@@ -84,4 +88,42 @@ func main() {
 		panic(err)
 	}
 	println("Successfully uploaded logs")
+}
+
+func readDotEnvFile() {
+	_, err := os.Stat(".env")
+	if os.IsNotExist(err) {
+		panic(errors.New("no .env file found"))
+	}
+	envFile, err := os.ReadFile(".env")
+	if err != nil {
+		panic(errors.Wrap(err, "failed to read .env file"))
+	}
+	for _, line := range bytes.Split(envFile, []byte("\n")) {
+		parts := bytes.Split(line, []byte("="))
+		if len(parts) == 2 {
+			key := string(parts[0])
+			value := string(parts[1])
+			setProperty(key, value)
+		} else {
+			println("Skipping line in .env file")
+		}
+	}
+}
+
+func setProperty(key string, value string) {
+	switch key {
+	case "client_secret":
+		clientSecret = value
+	case "client_id":
+		clientID = value
+	case "tenant_id":
+		tenantID = value
+	case "endpoint":
+		endpoint = value
+	case "dcr_immutable_id":
+		ruleID = value
+	case "stream_name":
+		streamName = value
+	}
 }

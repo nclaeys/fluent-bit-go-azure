@@ -1,6 +1,6 @@
 {
   "properties": {
-    "dataCollectionEndpointId": "/subscriptions/35ea681f-c2cd-4a81-aed3-c2087465d1f3/resourceGroups/datafy-dp-dm-dev-nc/providers/Microsoft.Insights/dataCollectionEndpoints/k8slogsncdev",
+    "dataCollectionEndpointId": "DATA_COLLECTION_ENDPOINT_ID",
     "streamDeclarations": {
       "Custom-fluentbit-logs-stream": {
         "columns": [
@@ -73,7 +73,7 @@
     },
     "destinations": {
       "logAnalytics": [{
-        "workspaceResourceId": "/subscriptions/35ea681f-c2cd-4a81-aed3-c2087465d1f3/resourceGroups/datafy-dp-dm-dev-nc/providers/Microsoft.OperationalInsights/workspaces/datafy-dp-deva-nc-dev",
+        "workspaceResourceId": "WORKSPACE_RESOURCE_ID",
         "name": "k8slogsworkspace"
       }]
     },
@@ -86,7 +86,7 @@
         "destinations": [
           "k8slogsworkspace"
         ],
-        "outputStream": "Custom-fluentbit_CL"
+        "outputStream": "Custom-TABLE_NAME"
       }
     ]
   }

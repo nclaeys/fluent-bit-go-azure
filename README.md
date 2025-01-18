@@ -20,14 +20,14 @@ One of the biggest drivers for using this new endpoint is that it supports `Basi
 1. Create a log analytics table with a schema. There is a PR to do this in terraform, for now you can run the following command using the Azure CLI:
 ```bash
 az monitor log-analytics workspace table create --workspace-name <workspace-name> --resource-group <resource-group> --name <table-name>_CL \
---columns TimeGenerated=datetime kubernetes_pod_name=string kubernetes_pod_id=string kubernetes_namespace=string kubernetes_host=string \
+--columns TimeGenerated=datetime kubernetes_pod_name=string kubernetes_pod_id=string kubernetes_namespace_name=string kubernetes_host=string \
 kubernetes_docker_id=string kubernetes_container_name=string kubernetes_container_image=string kubernetes_container_hash=string log=string stream=string \
 --plan Basic
 ```
 
 2. Create a data collection endpoint. This is a simple endpoint that you can use to send data to the logs ingestion API. This is needed to send our custom json data.
-```
-az monitor data-collection endpoint create --name k8slogsncdev --resource-group datafy-dp-dm-dev-nc --public-network-access Enabled --location westeurope
+```bash
+az monitor data-collection endpoint create --name <name> --resource-group <rg> --public-network-access Enabled --location westeurope
 ```
 
 Add permission: Monitor metrics publisher to the sp that is used to send data to the endpoint.
@@ -35,8 +35,36 @@ Add permission: Monitor metrics publisher to the sp that is used to send data to
 Note: if you do not want public access, you can change the network-access to use the `disabled` or `securedByPerimeter` setting.
 
 3. Create a data collection rule. This is required to specify the data format used as well as link our endpoint to our log analytics table.
-   We will not do any transformations as the schema of our endpoint is the same as our destination table. This way the transformation is just a passthrough (identified by `source`).
+   I included a template to generate a dcr for using fluentbit data in 'scripts/create-dcr-template'. For more details about the dcr see the [Azure documentation](https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/data-collection-rule-create-edit?tabs=cli).
+   You can generate the correct template using the following command:
+```bash
+./scripts/create-dcr-template/generate-dcr.sh <data-collection-endpoint-id> <workspace-resource-id> <logs-table-name>
+```
 
+Once the template is generated, you can create the dcr using the following command:
+```bash
+az monitor data-collection rule create \
+--location <location> \
+--resource-group <rg> \
+--endpoint-id <endpoint-id> \
+--rule-file ./scripts/create-dcr-template/fluentbit-logs-dcr-output.json \
+-n fluentbit-k8s-logs-dcr
+
+```
+
+## Testing the endpoint
+
+If you want to test the endpoint locally first, there is a simple script that writes some dummy data. 
+To use it, you need to create an AAD application and give it the `Monitoring Metrics Publisher` role on the data collection endpoint.
+Next, create a .env file in the root repository filling in the following values:
+```bash
+client_secret=
+client_id=
+tenant_id=
+endpoint=https://xxx.ingest.monitor.azure.com
+dcr_immutable_id=dcr-xxxxxx
+stream_name=
+```
 
 ## Packaging the plugin
 

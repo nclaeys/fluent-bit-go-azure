@@ -2,21 +2,15 @@ package main
 
 import (
 	"C"
-	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
+	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"io"
-	"net/http"
 	"os"
-	"strconv"
 	"time"
-	"unicode/utf8"
 	"unsafe"
 
 	"github.com/fluent/fluent-bit-go/output"
@@ -24,17 +18,32 @@ import (
 
 var azureLogOperators []*AzureOperator
 
+type FluentBitLogEntry struct {
+	TimeGenerated            string `json:"TimeGenerated"`
+	Time                     string `json:"time"`
+	KubernetesPodName        string `json:"kubernetes_pod_name"`
+	KubernetesPodId          string `json:"kubernetes_pod_id"`
+	KubernetesNamespaceName  string `json:"kubernetes_namespace_name"`
+	KubernetesHost           string `json:"kubernetes_host"`
+	KubernetesDockerId       string `json:"kubernetes_docker_id"`
+	KubernetesContainerName  string `json:"kubernetes_container_name"`
+	KubernetesContainerImage string `json:"kubernetes_container_image"`
+	KubernetesContainerHash  string `json:"kubernetes_container_hash"`
+	Log                      string `json:"log"`
+	Stream                   string `json:"stream"`
+}
+
 type AzureConfig struct {
-	WorkspaceId string
-	SharedKey   string
-	LogType     string
-	EndpointURI string
-	LogLevel    string
+	DcrImmutableId string
+	Endpoint       string
+	StreamName     string
+	EndpointURI    string
+	LogLevel       string
 }
 
 type AzureOperator struct {
-	config AzureConfig
-	client *http.Client
+	config     AzureConfig
+	logsClient *azlogs.Client
 }
 
 //export FLBPluginRegister
@@ -91,52 +100,27 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	log.Debug().Msgf("[azureconveyor] Flush called for id: %d", id)
 	operator := azureLogOperators[id]
 	decoder := output.NewDecoder(data, int(length))
-	marshalledValue, err := convertBinaryDataToJson(decoder)
+	jsonResult, err := convertToJson(decoder)
 	if err != nil {
 		return output.FLB_ERROR
 	}
-	err = operator.SendLogs(marshalledValue)
+	err = operator.SendLogs(jsonResult)
 	if err != nil {
 		return output.FLB_RETRY
 	}
 	return output.FLB_OK
 }
 
-func (a *AzureOperator) BuildHeaders(contentAsString string) (map[string]string, error) {
-	date := time.Now().UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")
-
-	azureApiSigningString := "POST\n" + strconv.Itoa(utf8.RuneCountInString(contentAsString)) + "\napplication/json\nx-ms-date:" + date + "\n/api/logs"
-	keyBytes, err := base64.StdEncoding.DecodeString(a.config.SharedKey)
-	if err != nil {
-		return nil, err
-	}
-
-	h := hmac.New(sha256.New, keyBytes)
-	h.Write([]byte(azureApiSigningString))
-	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
-
-	headers := map[string]string{
-		"Content-Type":  "application/json",
-		"x-ms-date":     date,
-		"Authorization": fmt.Sprintf("SharedKey %s:%s", a.config.WorkspaceId, signature),
-		"Log-Type":      a.config.LogType,
-		"User-Agent":    "Fluent-Bit",
-	}
-
-	return headers, nil
-}
-
 func createAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
-	workspaceId := output.FLBPluginConfigKey(plugin, "workspace_id")
-	sharedKey := output.FLBPluginConfigKey(plugin, "shared_key")
-	logType := output.FLBPluginConfigKey(plugin, "log_type")
+	dcrImmutableId := output.FLBPluginConfigKey(plugin, "dcr_immutable_id")
+	endpoint := output.FLBPluginConfigKey(plugin, "endpoint")
+	streamName := output.FLBPluginConfigKey(plugin, "stream_name")
 	logLevel := output.FLBPluginConfigKey(plugin, "log_level")
 	config := AzureConfig{
-		WorkspaceId: workspaceId,
-		SharedKey:   sharedKey,
-		LogType:     logType,
-		LogLevel:    logLevel,
-		EndpointURI: constructEndpointUri(workspaceId),
+		DcrImmutableId: dcrImmutableId,
+		Endpoint:       endpoint,
+		StreamName:     streamName,
+		LogLevel:       logLevel,
 	}
 	if logLevel != "" {
 		level, err := zerolog.ParseLevel(logLevel)
@@ -151,99 +135,102 @@ func createAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
 
 	log.Info().Msgf("[azureconveyor] Config: %v", config)
 	return &AzureOperator{
-		config: config,
-		client: &http.Client{},
+		config:     config,
+		logsClient: constructClient(config),
 	}, nil
 }
 
-func constructEndpointUri(customerId string) string {
-	return fmt.Sprintf("https://%s.ods.opinsights.azure.com/%s?api-version=2016-04-01", customerId, "api/logs")
+func constructClient(config AzureConfig) *azlogs.Client {
+	var cred, err = azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		panic(err)
+	}
+
+	client, err := azlogs.NewClient(config.Endpoint, cred, nil)
+	if err != nil {
+		panic(err)
+	}
+	return client
 }
 
-func convertBinaryDataToJson(dec *output.FLBDecoder) (string, error) {
-	var jsonEntries []map[string]interface{}
+func convertToJson(dec *output.FLBDecoder) (string, error) {
+	var jsonEntries []FluentBitLogEntry
 	count := 0
 	for {
 		ret, ts, record := output.GetRecord(dec)
 		if ret != 0 {
 			break
 		}
-		var timestamp time.Time
-		switch t := ts.(type) {
-		case output.FLBTime:
-			timestamp = ts.(output.FLBTime).Time
-		case uint64:
-			timestamp = time.Unix(int64(t), 0)
-		default:
-			log.Debug().Msg("time provided invalid, defaulting to now.")
-			timestamp = time.Now()
-		}
-		timestampString := timestamp.UTC().Format(time.RFC3339)
-		record["time"] = timestampString
-		jsonStruct := encodeJSON(record)
-		jsonEntries = append(jsonEntries, jsonStruct)
+		timestamp := getTimestampOrNow(ts)
+		fluentbitEntry := convertToFluentbitEntry(record, timestamp)
+		jsonEntries = append(jsonEntries, fluentbitEntry)
 		count++
 	}
 	marshalledValue, err := json.Marshal(jsonEntries)
 	if err != nil {
-		log.Err(err).Msg("[azureconveyor] Failed ot marshal json")
+		log.Err(err).Msg("[azureconveyor] Failed ot marshal fluentbit entries to json")
 		return "", err
 	}
 	log.Debug().Msgf("[azureconveyor] converted %d logs", count)
 	return string(marshalledValue), nil
 }
 
-func (a *AzureOperator) SendLogs(value string) error {
-	headers, err := a.BuildHeaders(value)
-	if err != nil {
-		return err
+func getTimestampOrNow(ts interface{}) time.Time {
+	var timestamp time.Time
+	switch t := ts.(type) {
+	case output.FLBTime:
+		timestamp = ts.(output.FLBTime).Time
+	case uint64:
+		timestamp = time.Unix(int64(t), 0)
+	default:
+		log.Debug().Msg("time provided invalid, defaulting to now.")
+		timestamp = time.Now()
 	}
-	request, err := http.NewRequest("POST", a.config.EndpointURI, bytes.NewReader([]byte(value)))
-	if err != nil {
-		log.Err(err).Msg("[azureconveyor] Failed to contruct request")
-		return err
-	}
-	for k, v := range headers {
-		request.Header.Set(k, v)
-	}
-	resp, err := a.client.Do(request)
-	if err != nil {
-		log.Err(err).Msg("[azureconveyor] Request to azure endpoint failed")
-		return err
-	}
-	if resp.StatusCode > 299 {
-		log.Warn().Msgf("[azureconveyor] Request to endpoint failed with status code: %d", resp.StatusCode)
-		if resp.ContentLength > 0 {
-			_, err := io.ReadAll(resp.Body)
-			if err != nil {
-				log.Info().Msgf("[azureconveyor] Failed to read response body: %s", err.Error())
-			}
-		}
-		return errors.New("request failed")
-	} else if resp.StatusCode == 200 {
-		log.Debug().Msg("[azureconveyor] Successful request send to azure")
-	}
-	return nil
+	return timestamp
 }
 
-func encodeJSON(record map[interface{}]interface{}) map[string]interface{} {
-	m := make(map[string]interface{})
-
+func convertToFluentbitEntry(record map[interface{}]interface{}, timestamp time.Time) FluentBitLogEntry {
+	fluentBitLog := FluentBitLogEntry{
+		Time: timestamp.UTC().Format(time.RFC3339),
+	}
 	for k, v := range record {
-		switch t := v.(type) {
-		case []byte:
-			// prevent encoding to base64
-			m[k.(string)] = string(t)
-		case map[interface{}]interface{}:
-			if nextValue, ok := record[k].(map[interface{}]interface{}); ok {
-				m[k.(string)] = encodeJSON(nextValue)
-			}
+		key := k.(string)
+		value := v.(string)
+		switch key {
+		case "kubernetes_pod_name":
+			fluentBitLog.KubernetesPodName = value
+		case "kubernetes_pod_id":
+			fluentBitLog.KubernetesPodId = value
+		case "kubernetes_namespace_name":
+			fluentBitLog.KubernetesNamespaceName = value
+		case "kubernetes_host":
+			fluentBitLog.KubernetesHost = value
+		case "kubernetes_docker_id":
+			fluentBitLog.KubernetesDockerId = value
+		case "kubernetes_container_name":
+			fluentBitLog.KubernetesContainerName = value
+		case "kubernetes_container_image":
+			fluentBitLog.KubernetesContainerImage = value
+		case "kubernetes_container_hash":
+			fluentBitLog.KubernetesContainerHash = value
+		case "log":
+			fluentBitLog.Log = value
+		case "stream":
+			fluentBitLog.Stream = value
 		default:
-			m[k.(string)] = v
+			log.Debug().Msgf("[azureconveyor] Unknown record key: %s", key)
 		}
 	}
+	return fluentBitLog
+}
 
-	return m
+func (a *AzureOperator) SendLogs(value string) error {
+	_, err := a.logsClient.Upload(context.Background(),
+		a.config.DcrImmutableId,
+		a.config.StreamName,
+		[]byte(value),
+		nil)
+	return err
 }
 
 func main() {
