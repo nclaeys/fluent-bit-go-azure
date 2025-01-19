@@ -18,7 +18,7 @@ import (
 
 var azureLogOperators []*AzureOperator
 
-type FluentBitLogEntry struct {
+type FluentbitLogEntry struct {
 	TimeGenerated            string `json:"TimeGenerated"`
 	Time                     string `json:"time"`
 	KubernetesPodName        string `json:"kubernetes_pod_name"`
@@ -100,6 +100,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	log.Debug().Msgf("[azureconveyor] Flush called for id: %d", id)
 	operator := azureLogOperators[id]
 	decoder := output.NewDecoder(data, int(length))
+
 	jsonResult, err := convertToJson(decoder)
 	if err != nil {
 		return output.FLB_ERROR
@@ -108,6 +109,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	if err != nil {
 		return output.FLB_RETRY
 	}
+
 	return output.FLB_OK
 }
 
@@ -122,15 +124,9 @@ func createAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
 		StreamName:     streamName,
 		LogLevel:       logLevel,
 	}
-	if logLevel != "" {
-		level, err := zerolog.ParseLevel(logLevel)
-		if err != nil {
-			log.Err(errors.Wrap(err, "failed to parse log level"))
-			return nil, err
-		}
-		zerolog.SetGlobalLevel(level)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
+	err := setLogLevel(logLevel)
+	if err != nil {
+		return nil, err
 	}
 
 	log.Info().Msgf("[azureconveyor] Config: %v", config)
@@ -138,6 +134,20 @@ func createAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
 		config:     config,
 		logsClient: constructClient(config),
 	}, nil
+}
+
+func setLogLevel(logLevel string) error {
+	if logLevel != "" {
+		level, err := zerolog.ParseLevel(logLevel)
+		if err != nil {
+			log.Err(errors.Wrap(err, "failed to parse log level"))
+			return err
+		}
+		zerolog.SetGlobalLevel(level)
+		return nil
+	}
+	zerolog.SetGlobalLevel(zerolog.WarnLevel)
+	return nil
 }
 
 func constructClient(config AzureConfig) *azlogs.Client {
@@ -154,15 +164,14 @@ func constructClient(config AzureConfig) *azlogs.Client {
 }
 
 func convertToJson(dec *output.FLBDecoder) (string, error) {
-	var jsonEntries []FluentBitLogEntry
+	var jsonEntries []FluentbitLogEntry
 	count := 0
 	for {
 		ret, ts, record := output.GetRecord(dec)
 		if ret != 0 {
 			break
 		}
-		timestamp := getTimestampOrNow(ts)
-		fluentbitEntry := convertToFluentbitEntry(record, timestamp)
+		fluentbitEntry := convertToFluentbitLogEntry(record, getTimestampOrNow(ts))
 		jsonEntries = append(jsonEntries, fluentbitEntry)
 		count++
 	}
@@ -189,8 +198,8 @@ func getTimestampOrNow(ts interface{}) time.Time {
 	return timestamp
 }
 
-func convertToFluentbitEntry(record map[interface{}]interface{}, timestamp time.Time) FluentBitLogEntry {
-	fluentBitLog := FluentBitLogEntry{
+func convertToFluentbitLogEntry(record map[interface{}]interface{}, timestamp time.Time) FluentbitLogEntry {
+	fluentBitLog := FluentbitLogEntry{
 		Time: timestamp.UTC().Format(time.RFC3339),
 	}
 	for k, v := range record {
