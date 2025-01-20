@@ -43,10 +43,6 @@ dcr_response=$(az monitor data-collection rule create \
 
 immutable_id=$(echo $dcr_response | jq -r '.immutableId')
 stream_name=$(echo $dcr_response | jq -r '.dataFlows[0].streams[0]')
-echo "Successfully created all the infrastructure."
-echo "Endpoint URI: $data_collection_endpoint"
-echo "Dcr immutable id $immutable_id"
-echo "Stream name: $stream_name"
 
 echo "Creating log analytics workspace identity..."
 identity=$(az identity create --resource-group $RESOURCE_GROUP --name $IDENITY_NAME --location $LOCATION)
@@ -54,3 +50,11 @@ identity=$(az identity create --resource-group $RESOURCE_GROUP --name $IDENITY_N
 data_collection_endpoint_resource_id=$(echo $data_collection_endpoint_response | jq -r '.id')
 az role assignment create --role "Monitoring Metrics Publisher" --assignee-principal-type ServicePrincipal --assignee $IDENITY_NAME --scope $data_collection_endpoint_resource_id
 
+echo "Successfully created all the infrastructure."
+echo "Endpoint URI: $data_collection_endpoint"
+echo "Dcr immutable id $immutable_id"
+echo "Stream name: $stream_name"
+
+echo "Azure managed identity details:"
+echo "client id: $(echo $identity | jq -r '.clientId')"
+echo "tenant id: $(echo $identity | jq -r '.tenantId')"
