@@ -26,6 +26,11 @@ The biggest driver for me for using this new endpoint is that it supports `Basic
 
 ## Getting started
 
+### All in one script
+
+Make sure Azure CLI is installed and you are logged in.
+
+
 ### Setting up the necessary Azure infrastructure
 
 1. Create a custom fluentbit table in your log analytics workspace. 
