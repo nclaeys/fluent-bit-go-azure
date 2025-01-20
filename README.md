@@ -29,9 +29,17 @@ The biggest driver for me for using this new endpoint is that it supports `Basic
 ### All in one script
 
 Make sure Azure CLI is installed and you are logged in.
+The easiest way to get started to use the following script, which will create all the necessary Azure resources.
+It will create all the necessary in a new resource group, take a look at the default variables before running:
+```bash
+./scripts/all-in-one.sh
+```
+
+### Deploy fluentbit
 
 
-### Setting up the necessary Azure infrastructure
+## Detailed explanation of Azure resources required
+Alternatively, you can follow the different steps below to alter the individual steps.
 
 1. Create a custom fluentbit table in your log analytics workspace. 
    There exists a PR to do this in terraform, but it is not merged yet. for now you can do this by running the following command using the Azure CLI:
@@ -70,9 +78,22 @@ az monitor data-collection rule create \
 -n fluentbit-k8s-logs-dcr
 ```
 
-### Testing your logs endpoint
+4. Create a user managed identity for your fluentbit pods by running:
+```bash
+identity=$(az identity create --resource-group $RESOURCE_GROUP --name $IDENITY_NAME --location $LOCATION)
+```
 
-Note: Make sure your user, AAD application or service principle that will send logs has the role `Monitor metrics publisher` attached.
+From this you will need the client_id and tenant_id such that your fluentbit pods can use Azure workload identity to authenticate with the Azure API.
+
+5. Create a role assignment for the user managed identity to be able to send logs to the logs ingestion API.
+```bash
+az role assignment create --role "Monitoring Metrics Publisher" --assignee-principal-type ServicePrincipal --assignee $IDENITY_NAME --scope $data_collection_endpoint_id
+```
+
+## Testing your logs endpoint
+
+Note: Make sure your user, AAD application or service principal, which you will use to send logs, has the role `Monitor metrics publisher` attached with scope the data collection endpoint.
+For this you cannot use the managed identity just created, as that only works on Azure resources.
 
 If you want to test the endpoint locally first, there is a simple script that writes some dummy data.
 Next, create a .env file in the root repository filling in the following values:
