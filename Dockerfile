@@ -15,7 +15,7 @@ RUN go mod download
 COPY out_azurelogsingestion/ /root/out_azurelogsingestion/
 RUN make build
 
-FROM fluent/fluent-bit:1.9.10-debug
+FROM fluent/fluent-bit:1.9.10
 
 COPY --from=gobuilder /root/out_azurelogsingestion.so /fluent-bit/bin/
 COPY fluent-bit.conf /fluent-bit/etc/
