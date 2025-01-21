@@ -187,6 +187,12 @@ func convertToJson(dec *output.FLBDecoder) (string, error) {
 			break
 		}
 		fluentbitEntry := convertToFluentbitLogEntry(record, getTimestampOrNow(ts))
+		marshal, err := json.Marshal(fluentbitEntry)
+		if err != nil {
+			log.Err(err).Msg("[azurelogsingestion] Failed to marshal fluentbit entry to json")
+			return "", err
+		}
+		log.Debug().Msgf("[azurelogsingestion] Converted log entry: %s", string(marshal))
 		jsonEntries = append(jsonEntries, fluentbitEntry)
 		count++
 	}
@@ -262,10 +268,15 @@ func convertKubernetesProperties(m map[interface{}]interface{}, f *FluentbitLogE
 }
 
 func convertSafely(v interface{}) string {
+	//TODO convert to switch
 	stringVal, ok := v.(string)
+
 	if !ok {
-		log.Debug().Msg("[azurelogsingestion] Cannot convert value to string")
-		return ""
+		bytesAsString, ok := v.([]byte)
+		if !ok {
+			log.Debug().Msgf("[azurelogsingestion] Failed to convert value: %v", v)
+		}
+		stringVal = string(bytesAsString)
 	}
 	return stringVal
 }
