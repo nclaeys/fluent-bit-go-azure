@@ -3,9 +3,10 @@
 Fluentbit output plugin, written in go, to send logs to the Azure logs ingestion API (this is the replacement of the legacy data collection API).
 The default [logs ingestion output plugin](https://docs.fluentbit.io/manual/pipeline/outputs/azure_logs_ingestion) does not support workload identity and relies on `client_id` and `client_secret` for interacting with the API.
 
-I cannot use that output plugin for two reasons:
-- I do not have access to the Entra ID tenant at customers using Terraform to manage the AAD applications. 
-  I should create tickets in order to register them, which breaks my Iac code. Therefore, I want to use user managed identities and give them access to Azure resources.
+This plugin does not work for me because:
+- I often do not have access to the Entra ID tenant at customers to manage the AAD applications. 
+  This results in me having to create tickets in order to register AAD applications, which breaks my IAC code. 
+  Therefore, I prefer to use user managed identities.
 - It is a bad practice to rely on a static `client_secret` values for production applications. 
   As these secrets are not rotated, they can be used forever when leaked. I want to use temporary access credentials.
 
@@ -23,21 +24,47 @@ The biggest driver for me for using this new endpoint is that it supports `Basic
 
 - Install the [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 - Having access to an Azure subscription
-- For some test scripts and extra troubleshooting, you need to install [Go](https://go.dev/doc/install)
 
 ## Getting started
 
-### All in one script
+### Infrastructure all in one
 
 Make sure Azure CLI is installed and you are logged in.
-The easiest way to get started to use the following script, which will create all the necessary Azure resources.
-It will create all the necessary in a new resource group, take a look at the default variables before running:
+The easiest way to get started to use the `all-in-one` script, which will create all the necessary Azure resources.
+All resources a dedicated resource group, take a look at the variables on top of the script before running it:
+
 ```bash
 ./scripts/all-in-one.sh
 ```
 
 ### Deploy fluentbit
 
+1. Use the provided fluentbit image to deploy fluentbit in your kubernetes cluster.
+The distributed images can be found [here](https://hub.docker.com/repository/docker/nilli9990/fluentbit-go-azure-logs-ingestion).
+
+2. Fill in the necessary fluentbit configuration in the `fluentbit-config.yaml` file. 
+Here you must do two things: restiger the plugin with fluentbit and configure the plugin correctly
+```yaml
+[PLUGINS]
+  Path /fluent-bit/bin/out_azureconveyor.so
+
+[OUTPUT]
+  Name            azurelogsingestion
+  LogLevel        debug
+  Endpoint        https://dummy-fluentbit-endpoint.ingest.monitor.azure.com
+  DcrImmutableId  dcr-000000
+  StreamName      Stream-fluentbit
+  Match           *
+```
+
+For more details on how to configure fluentbit, see the [fluentbit documentation](https://docs.fluentbit.io/manual/administration/configuring-fluent-bit/yaml).
+
+3. Set the necessary environment variables to use Azure workload identity as well as mount the Azure identity token in your fluentbit deployment.
+```bash
+AZURE_CLIENT_ID=""
+AZURE_TENANT_ID=""
+AZURE_FEDERATED_TOKEN_FILE="/var/run/secrets/tokens/azure-identity-token"
+```
 
 ## Detailed explanation of Azure resources required
 Alternatively, you can follow the different steps below to alter the individual steps.
@@ -66,7 +93,7 @@ Note: if you do not want public access, you can change the network-access to use
    You can generate a valid output template for you using:
 
 ```bash
-./scripts/create-dcr-template/generate-dcr.sh <data-collection-endpoint-id> <workspace-resource-id> <logs-table-name>
+./scripts/create-dcr-template/generate-dcr.sh <data-collection-endpoint-uri> <workspace-resource-id> <logs-table-name>
 ```
 
 Once the template is generated, you can create the dcr using the following command:
@@ -92,6 +119,7 @@ az role assignment create --role "Monitoring Metrics Publisher" --assignee-princ
 ```
 
 ## Testing your logs endpoint
+For this test scripts, you need to have Golang installed [Go](https://go.dev/doc/install)
 
 Note: Make sure your user, AAD application or service principal, which you will use to send logs, has the role `Monitor metrics publisher` attached with scope the data collection endpoint.
 For this you cannot use the managed identity just created, as that only works on Azure resources.

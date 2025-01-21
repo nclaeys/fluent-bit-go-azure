@@ -5,17 +5,21 @@ WORKDIR /root
 ENV GOOS=linux\
     GOARCH=amd64
 
-COPY / /root/
 
-RUN go mod tidy
+COPY go.mod /root/
+COPY go.sum /root/
+COPY Makefile /root/
+
 RUN go mod download
+
+COPY out_azurelogsingestion/ /root/out_azurelogsingestion/
 RUN make artifact
 
 FROM fluent/fluent-bit:1.9.10-debug
 
 COPY --from=gobuilder /root/out_azurelogsingestion.so /fluent-bit/bin/
-COPY --from=gobuilder /root/fluent-bit.conf /fluent-bit/etc/
-COPY --from=gobuilder /root/plugins.conf /fluent-bit/etc/
+COPY fluent-bit.conf /fluent-bit/etc/
+COPY plugins.conf /fluent-bit/etc/
 
 EXPOSE 2020
 

@@ -28,9 +28,10 @@ workspace_id=$(echo $workspace_response | jq -r '.id')
 echo "Log analytics workspaceId: $workspace_id"
 
 data_collection_endpoint=$(echo $data_collection_endpoint_response | jq -r '.logsIngestion.endpoint')
+data_collection_endpoint_id=$(echo $data_collection_endpoint_response | jq -r '.id')
 echo "Data collection endpoint uri: $data_collection_endpoint"
 
-./scripts/create-dcr-template/generate-dcr.sh $data_collection_endpoint $workspace_id $TABLE_NAME
+./scripts/create-dcr/generate-dcr.sh $data_collection_endpoint_id $workspace_id $TABLE_NAME
 echo "Generated data collection rule template: \n $(cat ./scripts/create-dcr-template/fluentbit-logs-dcr-output.json)"
 
 echo "Creating data collection rule..."

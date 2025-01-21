@@ -220,31 +220,54 @@ func convertToFluentbitLogEntry(record map[interface{}]interface{}, timestamp ti
 	for k, v := range record {
 		key := k.(string)
 		switch key {
-		case "kubernetes_pod_name":
-			fluentBitLog.KubernetesPodName = v.(string)
-		case "kubernetes_pod_id":
-			fluentBitLog.KubernetesPodId = v.(string)
-		case "kubernetes_namespace_name":
-			fluentBitLog.KubernetesNamespaceName = v.(string)
-		case "kubernetes_host":
-			fluentBitLog.KubernetesHost = v.(string)
-		case "kubernetes_docker_id":
-			fluentBitLog.KubernetesDockerId = v.(string)
-		case "kubernetes_container_name":
-			fluentBitLog.KubernetesContainerName = v.(string)
-		case "kubernetes_container_image":
-			fluentBitLog.KubernetesContainerImage = v.(string)
-		case "kubernetes_container_hash":
-			fluentBitLog.KubernetesContainerHash = v.(string)
+		case "kubernetes":
+			convertKubernetesProperties(v.(map[interface{}]interface{}), &fluentBitLog)
 		case "log":
-			fluentBitLog.Log = v.(string)
+			fluentBitLog.Log = convertSafely(v)
 		case "stream":
-			fluentBitLog.Stream = v.(string)
+			fluentBitLog.Stream = convertSafely(v)
+		case "time":
+			// Ignore as we already processed it
 		default:
 			log.Debug().Msgf("[azurelogsingestion] Unknown record key: %s", key)
 		}
 	}
 	return fluentBitLog
+}
+
+func convertKubernetesProperties(m map[interface{}]interface{}, f *FluentbitLogEntry) {
+	for k, v := range m {
+		keyAsString := k.(string)
+		switch keyAsString {
+		case "pod_name":
+			f.KubernetesPodName = convertSafely(v)
+		case "pod_id":
+			f.KubernetesPodId = convertSafely(v)
+		case "namespace_name":
+			f.KubernetesNamespaceName = convertSafely(v)
+		case "host":
+			f.KubernetesHost = convertSafely(v)
+		case "docker_id":
+			f.KubernetesDockerId = convertSafely(v)
+		case "container_name":
+			f.KubernetesContainerName = convertSafely(v)
+		case "container_image":
+			f.KubernetesContainerImage = convertSafely(v)
+		case "container_hash":
+			f.KubernetesContainerHash = convertSafely(v)
+		default:
+			log.Debug().Msgf("[azurelogsingestion] Unknown kubernetes record key: %s", keyAsString)
+		}
+	}
+}
+
+func convertSafely(v interface{}) string {
+	stringVal, ok := v.(string)
+	if !ok {
+		log.Debug().Msg("[azurelogsingestion] Cannot convert value to string")
+		return ""
+	}
+	return stringVal
 }
 
 func (a *AzureOperator) SendLogs(value string) error {
