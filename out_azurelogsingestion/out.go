@@ -274,11 +274,11 @@ func convertKubernetesProperties(m map[interface{}]interface{}, f *FluentbitLogE
 }
 
 func convertSafely(v interface{}) string {
-	switch v.(type) {
+	switch res := v.(type) {
 	case string:
-		return v.(string)
+		return res
 	case []byte:
-		return string(v.([]byte))
+		return string(res)
 	default:
 		log.Debug().Msgf("[azurelogsingestion] Failed to convert value: %v", v)
 		return ""

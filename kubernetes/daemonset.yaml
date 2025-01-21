@@ -23,8 +23,8 @@ spec:
               value: /var/run/secrets/tokens/azure-identity-token
             - name: AZURE_TENANT_ID
               value: <azure-tenant-id>
-          image: nilli9990/fluentbit-go-azure-logs-ingestion:latest
-          imagePullPolicy: Always
+          image: nilli9990/fluentbit-go-azure-logs-ingestion:v1.9.10-v0.0.1
+          imagePullPolicy: IfNotPresent
           name: fluent-bit
           resources:
             limits:
