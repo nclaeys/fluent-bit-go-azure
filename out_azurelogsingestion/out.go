@@ -48,14 +48,14 @@ type AzureOperator struct {
 
 //export FLBPluginRegister
 func FLBPluginRegister(def unsafe.Pointer) int {
-	log.Debug().Msg("[azureconveyor] Register called")
-	return output.FLBPluginRegister(def, "azureconveyor", "Registering azureconveyor output.")
+	log.Debug().Msg("[azurelogsingestion] Register called")
+	return output.FLBPluginRegister(def, "azurelogsingestion", "Registering azurelogsingestion output.")
 }
 
 //export FLBPluginInit
 func FLBPluginInit(plugin unsafe.Pointer) int {
 	operatorID := len(azureLogOperators)
-	log.Debug().Msgf("[azureconveyor] id = %d", operatorID)
+	log.Debug().Msgf("[azurelogsingestion] id = %d", operatorID)
 	output.FLBPluginSetContext(plugin, operatorID)
 	operator, err := createAzureOperator(plugin)
 	if err != nil {
@@ -71,33 +71,33 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 
 //export FLBPluginFlush
 func FLBPluginFlush(data unsafe.Pointer, length C.int, tag *C.char) int {
-	log.Debug().Msg("[azureconveyor] Flush called for unknown instance")
+	log.Debug().Msg("[azurelogsingestion] Flush called for unknown instance")
 	return output.FLB_OK
 }
 
 //export FLBPluginExit
 func FLBPluginExit() int {
-	log.Debug().Msg("[azureconveyor] Exit called for unknown instance")
+	log.Debug().Msg("[azurelogsingestion] Exit called for unknown instance")
 	return output.FLB_OK
 }
 
 //export FLBPluginExitCtx
 func FLBPluginExitCtx(ctx unsafe.Pointer) int {
 	id := output.FLBPluginGetContext(ctx).(string)
-	log.Debug().Msgf("[azureconveyor] Exit called for id: %s", id)
+	log.Debug().Msgf("[azurelogsingestion] Exit called for id: %s", id)
 	return output.FLB_OK
 }
 
 //export FLBPluginUnregister
 func FLBPluginUnregister(def unsafe.Pointer) {
-	log.Debug().Msg("[azureconveyor] Unregister called")
+	log.Debug().Msg("[azurelogsingestion] Unregister called")
 	output.FLBPluginUnregister(def)
 }
 
 //export FLBPluginFlushCtx
 func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int {
 	id := output.FLBPluginGetContext(ctx).(int)
-	log.Debug().Msgf("[azureconveyor] Flush called for id: %d", id)
+	log.Debug().Msgf("[azurelogsingestion] Flush called for id: %d", id)
 	operator := azureLogOperators[id]
 	decoder := output.NewDecoder(data, int(length))
 
@@ -129,7 +129,7 @@ func createAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
 		return nil, err
 	}
 
-	log.Info().Msgf("[azureconveyor] Config: %v", config)
+	log.Warn().Msgf("[azurelogsingestion] Config: %v", config)
 	return &AzureOperator{
 		config:     config,
 		logsClient: constructClient(config),
@@ -146,6 +146,7 @@ func setLogLevel(logLevel string) error {
 		zerolog.SetGlobalLevel(level)
 		return nil
 	}
+	log.Warn().Msg("No log level configured, defaulting to warn")
 	zerolog.SetGlobalLevel(zerolog.WarnLevel)
 	return nil
 }
@@ -177,10 +178,10 @@ func convertToJson(dec *output.FLBDecoder) (string, error) {
 	}
 	marshalledValue, err := json.Marshal(jsonEntries)
 	if err != nil {
-		log.Err(err).Msg("[azureconveyor] Failed ot marshal fluentbit entries to json")
+		log.Err(err).Msg("[azurelogsingestion] Failed ot marshal fluentbit entries to json")
 		return "", err
 	}
-	log.Debug().Msgf("[azureconveyor] converted %d logs", count)
+	log.Debug().Msgf("[azurelogsingestion] converted %d logs", count)
 	return string(marshalledValue), nil
 }
 
@@ -204,30 +205,29 @@ func convertToFluentbitLogEntry(record map[interface{}]interface{}, timestamp ti
 	}
 	for k, v := range record {
 		key := k.(string)
-		value := v.(string)
 		switch key {
 		case "kubernetes_pod_name":
-			fluentBitLog.KubernetesPodName = value
+			fluentBitLog.KubernetesPodName = v.(string)
 		case "kubernetes_pod_id":
-			fluentBitLog.KubernetesPodId = value
+			fluentBitLog.KubernetesPodId = v.(string)
 		case "kubernetes_namespace_name":
-			fluentBitLog.KubernetesNamespaceName = value
+			fluentBitLog.KubernetesNamespaceName = v.(string)
 		case "kubernetes_host":
-			fluentBitLog.KubernetesHost = value
+			fluentBitLog.KubernetesHost = v.(string)
 		case "kubernetes_docker_id":
-			fluentBitLog.KubernetesDockerId = value
+			fluentBitLog.KubernetesDockerId = v.(string)
 		case "kubernetes_container_name":
-			fluentBitLog.KubernetesContainerName = value
+			fluentBitLog.KubernetesContainerName = v.(string)
 		case "kubernetes_container_image":
-			fluentBitLog.KubernetesContainerImage = value
+			fluentBitLog.KubernetesContainerImage = v.(string)
 		case "kubernetes_container_hash":
-			fluentBitLog.KubernetesContainerHash = value
+			fluentBitLog.KubernetesContainerHash = v.(string)
 		case "log":
-			fluentBitLog.Log = value
+			fluentBitLog.Log = v.(string)
 		case "stream":
-			fluentBitLog.Stream = value
+			fluentBitLog.Stream = v.(string)
 		default:
-			log.Debug().Msgf("[azureconveyor] Unknown record key: %s", key)
+			log.Debug().Msgf("[azurelogsingestion] Unknown record key: %s", key)
 		}
 	}
 	return fluentBitLog

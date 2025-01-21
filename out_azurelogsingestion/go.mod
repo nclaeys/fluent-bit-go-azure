@@ -1,4 +1,4 @@
-module github.com/fluent/fluent-bit-go/out_azure_log_ingestion_workload
+module github.com/fluent/fluent-bit-go/out_azurelogsingestion
 
 go 1.23
 

@@ -1,5 +1,6 @@
 # fluent-bit-go-azure
-Fluentbit output plugin, written in go to send logs to the Azure logs ingestion API (this is the replacement of the legacy data collection API).
+
+Fluentbit output plugin, written in go, to send logs to the Azure logs ingestion API (this is the replacement of the legacy data collection API).
 The default [logs ingestion output plugin](https://docs.fluentbit.io/manual/pipeline/outputs/azure_logs_ingestion) does not support workload identity and relies on `client_id` and `client_secret` for interacting with the API.
 
 I cannot use that output plugin for two reasons:
