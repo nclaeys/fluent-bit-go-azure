@@ -114,10 +114,10 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 }
 
 func createAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
-	dcrImmutableId := output.FLBPluginConfigKey(plugin, "dcr_immutable_id")
+	dcrImmutableId := output.FLBPluginConfigKey(plugin, "dcrImmutableId")
 	endpoint := output.FLBPluginConfigKey(plugin, "endpoint")
-	streamName := output.FLBPluginConfigKey(plugin, "stream_name")
-	logLevel := output.FLBPluginConfigKey(plugin, "log_level")
+	streamName := output.FLBPluginConfigKey(plugin, "streamName")
+	logLevel := output.FLBPluginConfigKey(plugin, "logLevel")
 	config := AzureConfig{
 		DcrImmutableId: dcrImmutableId,
 		Endpoint:       endpoint,
@@ -146,7 +146,7 @@ func setLogLevel(logLevel string) error {
 		zerolog.SetGlobalLevel(level)
 		return nil
 	}
-	log.Warn().Msg("No log level configured, defaulting to warn")
+	log.Warn().Msg("[azurelogsingestion] No log level configured, defaulting to warn")
 	zerolog.SetGlobalLevel(zerolog.WarnLevel)
 	return nil
 }
