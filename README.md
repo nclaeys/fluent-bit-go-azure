@@ -33,6 +33,8 @@ For a detailed description of what the script does, see the [details](#detailed-
 
 ### Deploy fluentbit on Kubernetes
 
+The list of Docker images can be found [here](https://hub.docker.com/repository/docker/nilli9990/fluentbit-go-azure-logs-ingestion/general).
+
 In the kubernetes folder, you will find a standard example for deploying fluentbit using this plugin on kubernetes.
 1. Replace the `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` in the `kubernetes/fluentbit-deployment.yaml` file with the values of the user managed identity you created.
 2. Fill in the necessary fluentbit configuration in the `kubernetes/configmap.yaml` file. 
