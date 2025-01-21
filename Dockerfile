@@ -13,7 +13,7 @@ COPY Makefile /root/
 RUN go mod download
 
 COPY out_azurelogsingestion/ /root/out_azurelogsingestion/
-RUN make artifact
+RUN make build
 
 FROM fluent/fluent-bit:1.9.10-debug
 
