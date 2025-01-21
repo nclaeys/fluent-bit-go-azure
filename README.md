@@ -2,7 +2,7 @@
 
 Fluentbit output plugin, written in go, to send logs to the Azure logs ingestion API.
 
-This [default logs ingestion plugin](https://docs.fluentbit.io/manual/pipeline/outputs/azure_logs_ingestion) for fluentbit does not work for me because:
+The [default logs ingestion plugin](https://docs.fluentbit.io/manual/pipeline/outputs/azure_logs_ingestion) for fluentbit does not work for me because:
 - At many clients I have no access to Microsoft Entra ID directly from Terraform. 
   This means that I cannot create AAD applications myself but need to create support tickets in order to register AAD applications, which breaks my IAC code. 
   For these reasons, I prefer to depend on user managed identities instead of AAD applications.
