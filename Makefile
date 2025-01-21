@@ -1,5 +1,4 @@
-CONTAINER_REGISTRY ?= nilli9990
-docker_repo := $(CONTAINER_REGISTRY)/fluentbit-go-azure-logs-ingestion
+docker_repo := nilli9990/fluentbit-go-azure-logs-ingestion
 
 artifact:
 	go build -buildmode=c-shared -o out_azurelogsingestion.so ./out_azurelogsingestion

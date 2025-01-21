@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: fluent-bit
+  template:
+    metadata:
+      labels:
+        app: fluent-bit
+    spec:
+      automountServiceAccountToken: true
+      containers:
+        - env:
+            - name: AZURE_CLIENT_ID
+              value: <azure-client-id>
+            - name: AZURE_AUTHORITY_HOST
+              value: https://login.microsoftonline.com/
+            - name: AZURE_FEDERATED_TOKEN_FILE
+              value: /var/run/secrets/tokens/azure-identity-token
+            - name: AZURE_TENANT_ID
+              value: <azure-tenant-id>
+          image: nilli9990/fluentbit-go-azure-logs-ingestion:latest
+          imagePullPolicy: Always
+          name: fluent-bit
+          resources:
+            limits:
+              memory: 60Mi
+            requests:
+              cpu: 20m
+              memory: 60Mi
+          volumeMounts:
+            - mountPath: /var/log
+              name: varlog
+            - mountPath: /var/lib/docker/containers
+              name: varlibdockercontainers
+              readOnly: true
+            - mountPath: /fluent-bit/etc
+              name: config
+            - mountPath: /var/run/secrets/tokens
+              name: azure-identity-token
+              readOnly: true
+      restartPolicy: Always
+      serviceAccountName: fluent-bit
+      terminationGracePeriodSeconds: 30
+      tolerations:
+        - operator: Exists
+      volumes:
+        - hostPath:
+            path: /var/log
+          name: varlog
+        - hostPath:
+            path: /var/lib/docker/containers
+          name: varlibdockercontainers
+        - configMap:
+            defaultMode: 272
+            name: fluent-bit
+            optional: false
+          name: config
+        - name: azure-identity-token
+          projected:
+            defaultMode: 420
+            sources:
+              - serviceAccountToken:
+                  audience: api://AzureADTokenExchange
+                  expirationSeconds: 3600
+                  path: azure-identity-token
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 10%
+    type: RollingUpdate

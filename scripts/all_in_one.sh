@@ -7,6 +7,9 @@ DATA_COLLECTION_ENDPOINT_NAME=fluentbit_logs_endpoint
 LOCATION=westeurope
 IDENITY_NAME=fluentbit-k8s
 
+cd "$(dirname "$0")"
+echo "executing script from: $(pwd)"
+
 echo "Creating resource group $RESOURCE_GROUP..."
 az group create --name $RESOURCE_GROUP --location $LOCATION
 
@@ -23,7 +26,6 @@ kubernetes_docker_id=string kubernetes_container_name=string kubernetes_containe
 echo "Creating data collection endpoint with name $DATA_COLLECTION_ENDPOINT_NAME..."
 data_collection_endpoint_response=$(az monitor data-collection endpoint create --name $DATA_COLLECTION_ENDPOINT_NAME --resource-group $RESOURCE_GROUP --public-network-access Enabled --location $LOCATION)
 
-#TODO extract correct values
 workspace_id=$(echo $workspace_response | jq -r '.id')
 echo "Log analytics workspaceId: $workspace_id"
 
@@ -31,25 +33,25 @@ data_collection_endpoint=$(echo $data_collection_endpoint_response | jq -r '.log
 data_collection_endpoint_id=$(echo $data_collection_endpoint_response | jq -r '.id')
 echo "Data collection endpoint uri: $data_collection_endpoint"
 
-./scripts/create-dcr/generate-dcr.sh $data_collection_endpoint_id $workspace_id $TABLE_NAME
-echo "Generated data collection rule template: \n $(cat ./scripts/create-dcr-template/fluentbit-logs-dcr-output.json)"
+./create-dcr/generate-dcr.sh $data_collection_endpoint_id $workspace_id $TABLE_NAME
+echo "Generated data collection rule template: \n $(cat ./create-dcr/fluentbit-logs-dcr-output.json)"
 
 echo "Creating data collection rule..."
 dcr_response=$(az monitor data-collection rule create \
 --location $LOCATION \
 --resource-group $RESOURCE_GROUP \
 --endpoint-id $data_collection_endpoint \
---rule-file ./scripts/create-dcr-template/fluentbit-logs-dcr-output.json \
+--rule-file ./create-dcr/fluentbit-logs-dcr-output.json \
 -n fluentbit-k8s-logs-dcr)
 
 immutable_id=$(echo $dcr_response | jq -r '.immutableId')
+dcr_resource_id=$(echo $dcr_response | jq -r '.id')
 stream_name=$(echo $dcr_response | jq -r '.dataFlows[0].streams[0]')
 
 echo "Creating log analytics workspace identity..."
 identity=$(az identity create --resource-group $RESOURCE_GROUP --name $IDENITY_NAME --location $LOCATION)
 
-data_collection_endpoint_resource_id=$(echo $data_collection_endpoint_response | jq -r '.id')
-az role assignment create --role "Monitoring Metrics Publisher" --assignee-principal-type ServicePrincipal --assignee $IDENITY_NAME --scope $data_collection_endpoint_resource_id
+az role assignment create --role "Monitoring Metrics Publisher" --assignee-principal-type ServicePrincipal --assignee $IDENITY_NAME --scope $dcr_resource_id
 
 echo "Successfully created all the infrastructure."
 echo "Endpoint URI: $data_collection_endpoint"

@@ -1,24 +1,17 @@
 # fluent-bit-go-azure
 
-Fluentbit output plugin, written in go, to send logs to the Azure logs ingestion API (this is the replacement of the legacy data collection API).
-The default [logs ingestion output plugin](https://docs.fluentbit.io/manual/pipeline/outputs/azure_logs_ingestion) does not support workload identity and relies on `client_id` and `client_secret` for interacting with the API.
+Fluentbit output plugin, written in go, to send logs to the Azure logs ingestion API.
 
-This plugin does not work for me because:
-- I often do not have access to the Entra ID tenant at customers to manage the AAD applications. 
-  This results in me having to create tickets in order to register AAD applications, which breaks my IAC code. 
-  Therefore, I prefer to use user managed identities.
-- It is a bad practice to rely on a static `client_secret` values for production applications. 
-  As these secrets are not rotated, they can be used forever when leaked. I want to use temporary access credentials.
+This [default logs ingestion plugin](https://docs.fluentbit.io/manual/pipeline/outputs/azure_logs_ingestion) for fluentbit does not work for me because:
+- At many clients I have no access to Microsoft Entra ID directly from Terraform. 
+  This means that I cannot create AAD applications myself but need to create support tickets in order to register AAD applications, which breaks my IAC code. 
+  For these reasons, I prefer to depend on user managed identities instead of AAD applications.
+- It is a bad practice to rely on a static `client_secret` values for production applications as is required by the default plugin. 
+  As these secrets are not rotated, they can be used forever when leaked. 
+  I want to use temporary access credentials as is provided using [Azure workload identity](https://azure.github.io/azure-workload-identity/docs/) on k8s.
 
-Because of both reasons, I created this plugin such that I can authenticate using workload identity on kubernetes and send my logs to the logs ingestion endpoint.
-I wrote it in Golang as I am terrible at C and fluentbit allows writing output plugins in Golang.
-
-## Context: logging in Azure
-A year ago, Azure introduced a new API for processing logs and metrics integrated in Azure monitor.
-More details can be found [here](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/logs-ingestion-api-overview).
-
-This is a replacement of the legacy data collector API.
-The biggest driver for me for using this new endpoint is that it supports `Basic tables`, which are around 5 times cheaper than analytics tables.
+Because of both reasons, I created this plugin such that I can use workload identity with managed identities to send my logs to the logs ingestion endpoint.
+I wrote it in Golang as I am terrible at C and fluentbit supports output plugins written in Golang as described [here](https://docs.fluentbit.io/manual/development/golang-output-plugins).
 
 ## Prerequisites to get started
 
@@ -36,35 +29,15 @@ All resources a dedicated resource group, take a look at the variables on top of
 ```bash
 ./scripts/all-in-one.sh
 ```
+For a detailed description of what the script does, see the [details](#detailed-explanation-of-azure-resources-required) section.
 
-### Deploy fluentbit
+### Deploy fluentbit on Kubernetes
 
-1. Use the provided fluentbit image to deploy fluentbit in your kubernetes cluster.
-The distributed images can be found [here](https://hub.docker.com/repository/docker/nilli9990/fluentbit-go-azure-logs-ingestion).
-
-2. Fill in the necessary fluentbit configuration in the `fluentbit-config.yaml` file. 
-Here you must do two things: restiger the plugin with fluentbit and configure the plugin correctly
-```yaml
-[PLUGINS]
-  Path /fluent-bit/bin/out_azureconveyor.so
-
-[OUTPUT]
-  Name            azurelogsingestion
-  LogLevel        debug
-  Endpoint        https://dummy-fluentbit-endpoint.ingest.monitor.azure.com
-  DcrImmutableId  dcr-000000
-  StreamName      Stream-fluentbit
-  Match           *
-```
-
+In the kubernetes folder, you will find a standard example for deploying fluentbit using this plugin on kubernetes.
+1. Replace the `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` in the `kubernetes/fluentbit-deployment.yaml` file with the values of the user managed identity you created.
+2. Fill in the necessary fluentbit configuration in the `kubernetes/configmap.yaml` file. 
+Here you must fill in the `Endpoint`, `DcrImmutableId` and `StreamName` fields with their respective values.
 For more details on how to configure fluentbit, see the [fluentbit documentation](https://docs.fluentbit.io/manual/administration/configuring-fluent-bit/yaml).
-
-3. Set the necessary environment variables to use Azure workload identity as well as mount the Azure identity token in your fluentbit deployment.
-```bash
-AZURE_CLIENT_ID=""
-AZURE_TENANT_ID=""
-AZURE_FEDERATED_TOKEN_FILE="/var/run/secrets/tokens/azure-identity-token"
-```
 
 ## Detailed explanation of Azure resources required
 Alternatively, you can follow the different steps below to alter the individual steps.
@@ -135,5 +108,9 @@ dcr_immutable_id=dcr-xxxxxx
 stream_name=
 ```
 
-### Packaging the plugin
+## Background: changes in logging on Azure
+A year ago, Azure introduced a new API for processing logs and metrics integrated in Azure monitor, called the logs ingestion API.
+More details can be found [here](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/logs-ingestion-api-overview).
 
+This API is a replacement of the legacy data collector API.
+The biggest driver why I want to use this new endpoint is that it supports `Basic tables`, which are around 5 times cheaper than analytics tables.

@@ -18,6 +18,8 @@ import (
 	"C"
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
 	"github.com/pkg/errors"
@@ -121,6 +123,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	}
 	err = operator.SendLogs(jsonResult)
 	if err != nil {
+		log.Err(err).Msg("[azurelogsingestion] Failed to send logs to azure")
 		return output.FLB_RETRY
 	}
 
@@ -171,6 +174,13 @@ func constructClient(config AzureConfig) *azlogs.Client {
 		panic(err)
 	}
 
+	options := azlogs.ClientOptions{}
+	monitorScope := fmt.Sprintf("%s/.default", options.Cloud.Services[azlogs.ServiceNameIngestion].Audience)
+	_, err = cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{monitorScope}})
+	if err != nil {
+		panic(err)
+	}
+	log.Debug().Msgf("[azurelogsingestion] Successfully retrieved token for client")
 	client, err := azlogs.NewClient(config.Endpoint, cred, nil)
 	if err != nil {
 		panic(err)
@@ -187,12 +197,6 @@ func convertToJson(dec *output.FLBDecoder) (string, error) {
 			break
 		}
 		fluentbitEntry := convertToFluentbitLogEntry(record, getTimestampOrNow(ts))
-		marshal, err := json.Marshal(fluentbitEntry)
-		if err != nil {
-			log.Err(err).Msg("[azurelogsingestion] Failed to marshal fluentbit entry to json")
-			return "", err
-		}
-		log.Debug().Msgf("[azurelogsingestion] Converted log entry: %s", string(marshal))
 		jsonEntries = append(jsonEntries, fluentbitEntry)
 		count++
 	}
@@ -232,6 +236,8 @@ func convertToFluentbitLogEntry(record map[interface{}]interface{}, timestamp ti
 			fluentBitLog.Log = convertSafely(v)
 		case "stream":
 			fluentBitLog.Stream = convertSafely(v)
+		case "_p":
+			// Ignore
 		case "time":
 			// Ignore as we already processed it
 		default:
@@ -268,17 +274,15 @@ func convertKubernetesProperties(m map[interface{}]interface{}, f *FluentbitLogE
 }
 
 func convertSafely(v interface{}) string {
-	//TODO convert to switch
-	stringVal, ok := v.(string)
-
-	if !ok {
-		bytesAsString, ok := v.([]byte)
-		if !ok {
-			log.Debug().Msgf("[azurelogsingestion] Failed to convert value: %v", v)
-		}
-		stringVal = string(bytesAsString)
+	switch v.(type) {
+	case string:
+		return v.(string)
+	case []byte:
+		return string(v.([]byte))
+	default:
+		log.Debug().Msgf("[azurelogsingestion] Failed to convert value: %v", v)
+		return ""
 	}
-	return stringVal
 }
 
 func (a *AzureOperator) SendLogs(value string) error {
