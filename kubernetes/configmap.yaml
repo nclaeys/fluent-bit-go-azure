@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit
+  namespace: kube-system
+data:
+  fluent-bit-filter.conf: |+
+    [FILTER]
+        name                  multiline
+        match                 *
+        multiline.key_content log
+        multiline.parser      python, java, go
+
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Kube_Tag_Prefix     kube.var.log.containers.
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Merge_Log           On
+        K8S-Logging.Parser  Off
+        K8S-Logging.Exclude Off
+        Annotations         Off
+        Labels              Off
+        Buffer_Size         128KB
+
+  fluent-bit-input.conf: |
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/*.log
+        multiline.parser  cri, docker
+        Tag               kube.*
+        Refresh_Interval  5
+        Mem_Buf_Limit     10MB
+        Skip_Long_Lines   On
+  fluent-bit-output.conf: |+
+    [OUTPUT]
+        Name              azurelogsingestion
+        LogLevel          warn
+        Match             *
+        Endpoint          <logs-ingestion-endpoint>
+        DcrImmutableId    <dcr-immutable-id>
+        StreamName        Custom-fluentbit-logs-stream
+
+  fluent-bit-service.conf: |
+    [SERVICE]
+        Flush        1
+        Daemon       Off
+        Log_Level    warn
+        Parsers_File parsers.conf
+        Plugins_File plugins.conf
+  fluent-bit.conf: |
+    @INCLUDE fluent-bit-service.conf
+    @INCLUDE fluent-bit-input.conf
+    @INCLUDE fluent-bit-filter.conf
+    @INCLUDE fluent-bit-output.conf
+  plugins.conf: |
+    [PLUGINS]
+      Path /fluent-bit/bin/out_azurelogsingestion.so

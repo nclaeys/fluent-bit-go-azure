@@ -1,0 +1,93 @@
+{
+  "properties": {
+    "dataCollectionEndpointId": "DATA_COLLECTION_ENDPOINT_ID",
+    "streamDeclarations": {
+      "Custom-fluentbit-logs-stream": {
+        "columns": [
+          {
+            "name": "TimeGenerated",
+            "type": "datetime"
+          },
+          {
+            "name": "time",
+            "type": "datetime"
+          },
+          {
+            "name": "kubernetes_pod_name",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_pod_id",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_namespace_name",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_host",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_docker_id",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_container_image",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_container_name",
+            "type": "string"
+          },
+          {
+            "name": "kubernetes_container_hash",
+            "type": "string"
+          },
+          {
+            "name": "log",
+            "type": "string"
+          },
+          {
+            "name": "stream",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "dataSources": {
+      "fluentbitLogFiles": [
+        {
+          "streams": [
+            "Custom-fluentbit-logs-stream"
+          ],
+          "format": "json",
+          "name": "fluentbit-logs-file",
+          "settings": {
+            "text": {
+              "recordStartTimestampFormat": "yyyy-MM-ddTHH:mm:ssk"
+            }
+          }
+        }
+      ]
+    },
+    "destinations": {
+      "logAnalytics": [{
+        "workspaceResourceId": "WORKSPACE_RESOURCE_ID",
+        "name": "k8slogsworkspace"
+      }]
+    },
+    "dataFlows": [
+      {
+        "streams": [
+          "Custom-fluentbit-logs-stream"
+        ],
+        "transformKql": "source",
+        "destinations": [
+          "k8slogsworkspace"
+        ],
+        "outputStream": "Custom-TABLE_NAME"
+      }
+    ]
+  }
+}
