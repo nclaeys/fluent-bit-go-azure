@@ -1,7 +1,10 @@
 package main
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
+	mock_logs "github.com/fluent/fluent-bit-go/out_azurelogsingestion/mocks/azlogs/mock_logsclient"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 	"testing"
 	"time"
 )
@@ -78,4 +81,21 @@ func createSimpleLog(now time.Time) map[interface{}]interface{} {
 		"_p":     "F",
 		"log":    "{\"level\":\"debug\",\"message\":\"[azurelogsingestion] id = 0\"}",
 	}
+}
+
+func TestSendLogs_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_logs.NewMockAzureLogsClient(ctrl)
+	operator := &AzureOperator{
+		config: AzureConfig{
+			DcrImmutableId: "test-id",
+			StreamName:     "test-stream",
+		},
+		logsClient: mockClient,
+	}
+
+	mockClient.EXPECT().Upload(gomock.Any(), "test-id", "test-stream", gomock.Any(), gomock.Any()).Return(azlogs.UploadResponse{}, nil)
+
+	err := operator.SendLogs(`{"log": "test message"}`)
+	assert.NoError(t, err)
 }
