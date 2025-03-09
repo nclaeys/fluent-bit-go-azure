@@ -38,8 +38,19 @@ The list of Docker images can be found [here](https://hub.docker.com/repository/
 In the kubernetes folder, you will find a standard example for deploying fluentbit using this plugin on kubernetes.
 1. Replace the `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` in the `kubernetes/fluentbit-deployment.yaml` file with the values of the user managed identity you created.
 2. Fill in the necessary fluentbit configuration in the `kubernetes/configmap.yaml` file. 
-Here you must fill in the `Endpoint`, `DcrImmutableId` and `StreamName` fields with their respective values.
+Here you must fill in the necessary configuration for this output plugin and requires at least `Endpoint`, `DcrImmutableId` and `StreamName` to be filled in.
 For more details on how to configure fluentbit, see the [fluentbit documentation](https://docs.fluentbit.io/manual/administration/configuring-fluent-bit/yaml).
+An example configuration for this output plugin looks as follows:
+
+```yaml
+[OUTPUT]
+    Name            azurelogsingestion
+    LogLevel        debug
+    Endpoint        https://dummy-fluentbit-endpoint.ingest.monitor.azure.com
+    DcrImmutableId  dcr-000000
+    StreamName      Stream-fluentbit
+    Match           *
+```
 
 ## Detailed explanation of Azure resources required
 Alternatively, you can follow the different steps below to alter the individual steps.
