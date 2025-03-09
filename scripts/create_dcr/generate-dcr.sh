@@ -1,4 +1,8 @@
 #!/bin/bash
+set -ex
+
+cd "$(dirname "$0")"
+echo "executing script from: $(pwd)"
 
 # This script generates a DCR file from a template file by replacing the placeholders with the actual values.
 DCR_TEMPLATE_FILE=fluentbit-logs-dcr-template.json

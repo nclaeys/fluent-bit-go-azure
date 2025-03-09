@@ -86,7 +86,7 @@
         "destinations": [
           "k8slogsworkspace"
         ],
-        "outputStream": "Custom-TABLE_NAME"
+        "outputStream": "Custom-TABLE_NAME_CL"
       }
     ]
   }
