@@ -17,5 +17,8 @@ docker-build:
 clean:
 	rm -rf *.so *.h *~
 
+mock:
+	go run go.uber.org/mock/mockgen -source=out_azurelogsingestion/logs/main.go -destination=mocks/logs/mock_logsclient/mock.go
+
 test:
 	go test $(TEST_OPTS) ./out_azurelogsingestion

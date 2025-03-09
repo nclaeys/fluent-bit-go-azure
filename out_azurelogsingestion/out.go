@@ -22,9 +22,11 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
+	"github.com/fluent/fluent-bit-go/out_azurelogsingestion/out_azurelogsingestion/logs"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
 	"os"
 	"time"
 	"unsafe"
@@ -59,7 +61,7 @@ type AzureConfig struct {
 
 type AzureOperator struct {
 	config     AzureConfig
-	logsClient *azlogs.Client
+	logsClient logs.AzureLogsClient
 }
 
 //export FLBPluginRegister
@@ -73,7 +75,7 @@ func FLBPluginInit(plugin unsafe.Pointer) int {
 	operatorID := len(azureLogOperators)
 	log.Debug().Msgf("[azurelogsingestion] id = %d", operatorID)
 	output.FLBPluginSetContext(plugin, operatorID)
-	operator, err := createAzureOperator(plugin)
+	operator, err := NewAzureOperator(plugin)
 	if err != nil {
 		log.Err(err).Msg("failed creating azure operator")
 		output.FLBPluginUnregister(plugin)
@@ -130,7 +132,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	return output.FLB_OK
 }
 
-func createAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
+func NewAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
 	dcrImmutableId := output.FLBPluginConfigKey(plugin, "dcrImmutableId")
 	endpoint := output.FLBPluginConfigKey(plugin, "endpoint")
 	streamName := output.FLBPluginConfigKey(plugin, "streamName")
@@ -154,21 +156,20 @@ func createAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
 }
 
 func setLogLevel(logLevel string) error {
-	if logLevel != "" {
-		level, err := zerolog.ParseLevel(logLevel)
-		if err != nil {
-			log.Err(errors.Wrap(err, "failed to parse log level"))
-			return err
-		}
-		zerolog.SetGlobalLevel(level)
-		return nil
+	if logLevel == "" {
+		log.Warn().Msg("[azurelogsingestion] No log level configured, defaulting to warn")
+		zerolog.SetGlobalLevel(zerolog.WarnLevel)
 	}
-	log.Warn().Msg("[azurelogsingestion] No log level configured, defaulting to warn")
-	zerolog.SetGlobalLevel(zerolog.WarnLevel)
+	level, err := zerolog.ParseLevel(logLevel)
+	if err != nil {
+		log.Err(errors.Wrap(err, "failed to parse log level"))
+		return err
+	}
+	zerolog.SetGlobalLevel(level)
 	return nil
 }
 
-func constructClient(config AzureConfig) *azlogs.Client {
+func constructClient(config AzureConfig) logs.AzureLogsClient {
 	var cred, err = azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		panic(err)
@@ -190,7 +191,6 @@ func constructClient(config AzureConfig) *azlogs.Client {
 
 func convertToJson(dec *output.FLBDecoder) (string, error) {
 	var jsonEntries []FluentbitLogEntry
-	count := 0
 	for {
 		ret, ts, record := output.GetRecord(dec)
 		if ret != 0 {
@@ -198,35 +198,31 @@ func convertToJson(dec *output.FLBDecoder) (string, error) {
 		}
 		fluentbitEntry := convertToFluentbitLogEntry(record, getTimestampOrNow(ts))
 		jsonEntries = append(jsonEntries, fluentbitEntry)
-		count++
 	}
 	marshalledValue, err := json.Marshal(jsonEntries)
 	if err != nil {
 		log.Err(err).Msg("[azurelogsingestion] Failed ot marshal fluentbit entries to json")
 		return "", err
 	}
-	log.Debug().Msgf("[azurelogsingestion] converted %d logs", count)
+	log.Debug().Msgf("[azurelogsingestion] converted %d logs", len(jsonEntries))
 	return string(marshalledValue), nil
 }
 
 func getTimestampOrNow(ts interface{}) time.Time {
-	var timestamp time.Time
 	switch t := ts.(type) {
 	case output.FLBTime:
-		timestamp = ts.(output.FLBTime).Time
+		return ts.(output.FLBTime).Time
 	case uint64:
-		timestamp = time.Unix(int64(t), 0)
+		return time.Unix(int64(t), 0)
 	default:
 		log.Debug().Msg("time provided invalid, defaulting to now.")
-		timestamp = time.Now()
+		return time.Now()
 	}
-	return timestamp
 }
 
 func convertToFluentbitLogEntry(record map[interface{}]interface{}, timestamp time.Time) FluentbitLogEntry {
-	fluentBitLog := FluentbitLogEntry{
-		Time: timestamp.UTC().Format(time.RFC3339),
-	}
+	fluentBitLog := FluentbitLogEntry{Time: timestamp.UTC().Format(time.RFC3339)}
+
 	for k, v := range record {
 		key := k.(string)
 		switch key {
