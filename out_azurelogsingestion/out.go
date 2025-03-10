@@ -18,7 +18,6 @@ import (
 	"C"
 	"context"
 	"encoding/json"
-	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
@@ -175,15 +174,16 @@ func constructClient(config AzureConfig) logs.AzureLogsClient {
 		panic(err)
 	}
 
-	options := azlogs.ClientOptions{}
-	monitorScope := fmt.Sprintf("%s/.default", options.Cloud.Services[azlogs.ServiceNameIngestion].Audience)
-	_, err = cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{monitorScope}})
+	scope := "https://monitor.azure.com/.default"
+	_, err = cred.GetToken(context.Background(), policy.TokenRequestOptions{Scopes: []string{scope}})
 	if err != nil {
 		panic(err)
 	}
 	log.Debug().Msgf("[azurelogsingestion] Successfully retrieved token for client")
 	client, err := azlogs.NewClient(config.Endpoint, cred, nil)
+	clientId := os.Getenv("AZURE_CLIENT_ID")
 	if err != nil {
+		log.Debug().Msgf("[azurelogsingestion] Successfully retrieve token for client %s, and scope %s", clientId, scope)
 		panic(err)
 	}
 	return client
