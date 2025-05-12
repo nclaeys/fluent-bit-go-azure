@@ -125,15 +125,23 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	if err != nil {
 		return output.FLB_ERROR
 	}
-	for _, jsonEntry := range jsonEntries {
-		err = operator.SendLogs(jsonEntry)
-		if err != nil {
-			log.Err(err).Msg("[azurelogsingestion] Failed to send logs to azure")
-			return output.FLB_RETRY
-		}
+	err = processEntries(jsonEntries, operator)
+	if err != nil {
+		log.Err(err).Msg("[azurelogsingestion] Failed to send logs to azure")
+		return output.FLB_RETRY
 	}
 
 	return output.FLB_OK
+}
+
+func processEntries(jsonEntries []string, operator *AzureOperator) error {
+	for _, jsonEntry := range jsonEntries {
+		err := operator.SendLogs(jsonEntry)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func NewAzureOperator(plugin unsafe.Pointer) (*AzureOperator, error) {
@@ -212,6 +220,9 @@ func convertToJson(dec *output.FLBDecoder) ([]string, error) {
 }
 
 func convertFluentbitEntriesToJson(entries []FluentbitLogEntry) ([]string, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
 	log.Debug().Msgf("[azurelogsingestion] converted %d logs", len(entries))
 	marshalledValue, err := json.Marshal(entries)
 	if err != nil {
