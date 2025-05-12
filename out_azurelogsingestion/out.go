@@ -215,7 +215,7 @@ func convertFluentbitEntriesToJson(entries []FluentbitLogEntry) ([]string, error
 	log.Debug().Msgf("[azurelogsingestion] converted %d logs", len(entries))
 	marshalledValue, err := json.Marshal(entries)
 	if err != nil {
-		log.Err(err).Msg("[azurelogsingestion] Failed ot marshal fluentbit entries to json")
+		log.Err(err).Msg("[azurelogsingestion] Failed to marshal fluentbit entries to json")
 		return nil, err
 	}
 	log.Debug().Msgf("[azurelogsingestion] size of log entry is %d", len(marshalledValue))
