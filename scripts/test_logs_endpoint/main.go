@@ -31,18 +31,17 @@ var clientSecret = ""
 var clientID = ""
 
 type FluentBitLog struct {
-	TimeGenerated            time.Time `json:"TimeGenerated"`
-	Time                     time.Time `json:"time"`
-	KubernetesPodName        string    `json:"kubernetes_pod_name"`
-	KubernetesPodId          string    `json:"kubernetes_pod_id"`
-	KubernetesNamespaceName  string    `json:"kubernetes_namespace_name"`
-	KubernetesHost           string    `json:"kubernetes_host"`
-	KubernetesDockerId       string    `json:"kubernetes_docker_id"`
-	KubernetesContainerName  string    `json:"kubernetes_container_name"`
-	KubernetesContainerImage string    `json:"kubernetes_container_image"`
-	KubernetesContainerHash  string    `json:"kubernetes_container_hash"`
-	Log                      string    `json:"log"`
-	Stream                   string    `json:"stream"`
+	TimeGenerated            string `json:"TimeGenerated"`
+	KubernetesPodName        string `json:"kubernetes_pod_name"`
+	KubernetesPodId          string `json:"kubernetes_pod_id"`
+	KubernetesNamespaceName  string `json:"kubernetes_namespace_name"`
+	KubernetesHost           string `json:"kubernetes_host"`
+	KubernetesDockerId       string `json:"kubernetes_docker_id"`
+	KubernetesContainerName  string `json:"kubernetes_container_name"`
+	KubernetesContainerImage string `json:"kubernetes_container_image"`
+	KubernetesContainerHash  string `json:"kubernetes_container_hash"`
+	Log                      string `json:"log"`
+	Stream                   string `json:"stream"`
 }
 
 func main() {
@@ -61,8 +60,7 @@ func main() {
 
 	for i := 0; i < 10; i++ {
 		data = append(data, FluentBitLog{
-			Time:                     time.Now().UTC(),
-			TimeGenerated:            time.Now().UTC(),
+			TimeGenerated:            time.Now().UTC().Format(time.RFC3339Nano),
 			KubernetesNamespaceName:  "default",
 			KubernetesContainerHash:  "someHash",
 			KubernetesPodId:          "podId",
@@ -77,6 +75,8 @@ func main() {
 	}
 
 	logs, err := json.Marshal(data)
+
+	print("Logs: ", string(logs))
 
 	if err != nil {
 		panic(err)
