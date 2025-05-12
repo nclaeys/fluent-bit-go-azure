@@ -9,22 +9,22 @@ import (
 	"time"
 )
 
-func TestConvertToFluentbitEntry_doesNotUnwrapLogEntry(t *testing.T) {
+func TestConvertToFluentbitLogEntry_doesNotUnwrapLogEntry(t *testing.T) {
 	now := time.Now().UTC()
 	log := createSimpleLog(now)
 	entry := convertToFluentbitLogEntry(log, now)
 
-	assert.Equal(t, now.Format(time.RFC3339), entry.Time)
+	assert.Equal(t, now.Format(time.RFC3339Nano), entry.TimeGenerated)
 	assert.Equal(t, "stdout", entry.Stream)
 	assert.Equal(t, "{\"level\":\"debug\",\"message\":\"[azurelogsingestion] id = 0\"}", entry.Log)
 }
 
-func TestConvertToFluentbitEntry_KubernetesEntries_unwrapsThem(t *testing.T) {
+func TestConvertToFluentbitLogEntry_KubernetesEntries_unwrapsThem(t *testing.T) {
 	now := time.Now().UTC()
 	log := createLogWithKubernetesEntries(now)
 	entry := convertToFluentbitLogEntry(log, now)
 
-	assert.Equal(t, now.Format(time.RFC3339), entry.Time)
+	assert.Equal(t, now.Format(time.RFC3339Nano), entry.TimeGenerated)
 	assert.Equal(t, "{\"level\":\"debug\",\"message\":\"[azurelogsingestion] id = 0\"}", entry.Log)
 	assert.Equal(t, "container_name", entry.KubernetesContainerName)
 	assert.Equal(t, "pod_name", entry.KubernetesPodName)
@@ -36,14 +36,68 @@ func TestConvertToFluentbitEntry_KubernetesEntries_unwrapsThem(t *testing.T) {
 	assert.Equal(t, "namespace_name", entry.KubernetesNamespaceName)
 }
 
-func TestConvertToFluentbitEntry_handlesByteArrays(t *testing.T) {
+func TestConvertToFluentbitLogEntry_handlesByteArrays(t *testing.T) {
 	now := time.Now().UTC()
 	log := createLogWithByteArrayValues(now)
 	entry := convertToFluentbitLogEntry(log, now)
 
-	assert.Equal(t, now.Format(time.RFC3339), entry.Time)
+	assert.Equal(t, now.Format(time.RFC3339Nano), entry.TimeGenerated)
 	assert.Equal(t, "{\"level\":\"debug\",\"message\":\"[azurelogsingestion] id = 0\"}", entry.Log)
 	assert.Equal(t, "stdout", entry.Stream)
+}
+
+func TestConvertFluentbitEntriesToJson_returnsJsonResult(t *testing.T) {
+	log := generateDummyFluentbitLogEntry()
+	entry, err := convertFluentbitEntriesToJson([]FluentbitLogEntry{log, log})
+
+	assert.NoError(t, err)
+	assert.Len(t, entry, 1)
+}
+
+func TestConvertFluentbitEntriesToJson_manyEntriesLargerThan1Megabyte_splitsUpResult(t *testing.T) {
+	log := generateDummyFluentbitLogEntry()
+	var entriesLargerOneMb []FluentbitLogEntry
+	for range 1400 {
+		entriesLargerOneMb = append(entriesLargerOneMb, log)
+	}
+	entry, err := convertFluentbitEntriesToJson(entriesLargerOneMb)
+
+	assert.NoError(t, err)
+	assert.Len(t, entry, 2)
+}
+
+func TestConvertFluentbitEntriesToJson_superLargEntryThan1Megabyte_splitsUpResult(t *testing.T) {
+	longLog := "[2025-05-12 12:12:27,166] {kubernetes_executor.py:380} DEBUG - self.running: {TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-keyvault-parameter-does-not-exist', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1), TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-client-id-not-exists', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1), TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-client-id-no-identity-credential', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1), TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-no-client-id', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1), TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-client-id-no-keyvault-access', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1)}"
+	longLogEntry := generateDummyFluentbitLogEntryWithLog(longLog)
+	var entriesLargerOneMb []FluentbitLogEntry
+	for range 750 {
+		entriesLargerOneMb = append(entriesLargerOneMb, longLogEntry)
+	}
+	entry, err := convertFluentbitEntriesToJson(entriesLargerOneMb)
+
+	assert.NoError(t, err)
+	assert.Len(t, entry, 2)
+}
+
+func generateDummyFluentbitLogEntry() FluentbitLogEntry {
+	log := "exec /usr/bin/tini -s -- /opt/spark/bin/spark-submit --master k8s://https://datafy-dp-deva-nc-dev-q0xnpayz.hcp.westeurope.azmk8s.io --name 4420609e-2fde-48f4-a686-499c0262f5a2 --deploy-mode cluster"
+	return generateDummyFluentbitLogEntryWithLog(log)
+}
+
+func generateDummyFluentbitLogEntryWithLog(log string) FluentbitLogEntry {
+	return FluentbitLogEntry{
+		TimeGenerated:            time.Now().UTC().Format(time.RFC3339Nano),
+		KubernetesPodName:        "datafy-pyspark-sample-b7b8ff96c4335653-exec-1",
+		KubernetesPodId:          "cf8291a4-5d2f-4f54-9466-da36a3899dd9",
+		KubernetesNamespaceName:  "namespace",
+		KubernetesHost:           "aks-sd8sv51313-14978311-vmss000004",
+		KubernetesDockerId:       "aks-sd8sv51313-14978311-vmss000004",
+		KubernetesContainerName:  "my-base-container",
+		KubernetesContainerImage: "my-container-image",
+		KubernetesContainerHash:  "f9519bbaf68aab771291618e8245b43dc0990a1df3e69eafd04c760c54c27aba",
+		Log:                      log,
+		Stream:                   "info",
+	}
 }
 
 func createLogWithByteArrayValues(now time.Time) map[interface{}]interface{} {

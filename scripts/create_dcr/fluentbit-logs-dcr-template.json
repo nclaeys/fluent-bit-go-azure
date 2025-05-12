@@ -9,10 +9,6 @@
             "type": "datetime"
           },
           {
-            "name": "time",
-            "type": "datetime"
-          },
-          {
             "name": "kubernetes_pod_name",
             "type": "string"
           },

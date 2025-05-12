@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"slices"
 
 	"os"
 	"time"
@@ -35,9 +36,11 @@ import (
 
 var azureLogOperators []*AzureOperator
 
+const oneMb = 1048576
+const logEntriesInOneMb = 700 // 1MB / 1500 (size of a big log entry)
+
 type FluentbitLogEntry struct {
 	TimeGenerated            string `json:"TimeGenerated"`
-	Time                     string `json:"time"`
 	KubernetesPodName        string `json:"kubernetes_pod_name"`
 	KubernetesPodId          string `json:"kubernetes_pod_id"`
 	KubernetesNamespaceName  string `json:"kubernetes_namespace_name"`
@@ -118,14 +121,16 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	operator := azureLogOperators[id]
 	decoder := output.NewDecoder(data, int(length))
 
-	jsonResult, err := convertToJson(decoder)
+	jsonEntries, err := convertToJson(decoder)
 	if err != nil {
 		return output.FLB_ERROR
 	}
-	err = operator.SendLogs(jsonResult)
-	if err != nil {
-		log.Err(err).Msg("[azurelogsingestion] Failed to send logs to azure")
-		return output.FLB_RETRY
+	for _, jsonEntry := range jsonEntries {
+		err = operator.SendLogs(jsonEntry)
+		if err != nil {
+			log.Err(err).Msg("[azurelogsingestion] Failed to send logs to azure")
+			return output.FLB_RETRY
+		}
 	}
 
 	return output.FLB_OK
@@ -189,23 +194,48 @@ func constructClient(config AzureConfig) logs.AzureLogsClient {
 	return client
 }
 
-func convertToJson(dec *output.FLBDecoder) (string, error) {
-	var jsonEntries []FluentbitLogEntry
+func convertToJson(dec *output.FLBDecoder) ([]string, error) {
+	var entries []FluentbitLogEntry
 	for {
 		ret, ts, record := output.GetRecord(dec)
 		if ret != 0 {
 			break
 		}
 		fluentbitEntry := convertToFluentbitLogEntry(record, getTimestampOrNow(ts))
-		jsonEntries = append(jsonEntries, fluentbitEntry)
+		entries = append(entries, fluentbitEntry)
 	}
-	marshalledValue, err := json.Marshal(jsonEntries)
+	jsonEntries, err := convertFluentbitEntriesToJson(entries)
+	if err != nil {
+		return nil, err
+	}
+	return jsonEntries, nil
+}
+
+func convertFluentbitEntriesToJson(entries []FluentbitLogEntry) ([]string, error) {
+	log.Debug().Msgf("[azurelogsingestion] converted %d logs", len(entries))
+	marshalledValue, err := json.Marshal(entries)
 	if err != nil {
 		log.Err(err).Msg("[azurelogsingestion] Failed ot marshal fluentbit entries to json")
-		return "", err
+		return nil, err
 	}
-	log.Debug().Msgf("[azurelogsingestion] converted %d logs", len(jsonEntries))
-	return string(marshalledValue), nil
+	log.Debug().Msgf("[azurelogsingestion] size of log entry is %d", len(marshalledValue))
+	if len(marshalledValue) < oneMb {
+		return []string{string(marshalledValue)}, nil
+	}
+	log.Warn().Msg("[azurelogsingestion] Log entries size exceeds 1MB, chunking before sending to Azure")
+	var jsonValues []string
+	for chunk := range slices.Chunk(entries, logEntriesInOneMb) {
+		chunkValue, err := json.Marshal(chunk)
+		if err != nil {
+			log.Err(err).Msg("[azurelogsingestion] Failed ot marshal chunked fluentbit entries to json")
+			return nil, err
+		}
+		jsonValues = append(jsonValues, string(chunkValue))
+	}
+	if len(jsonValues) < 2 {
+		log.Warn().Msg("[azurelogsingestion] Chunking failed, investigate why the log lines are so large")
+	}
+	return jsonValues, nil
 }
 
 func getTimestampOrNow(ts interface{}) time.Time {
@@ -221,7 +251,7 @@ func getTimestampOrNow(ts interface{}) time.Time {
 }
 
 func convertToFluentbitLogEntry(record map[interface{}]interface{}, timestamp time.Time) FluentbitLogEntry {
-	fluentBitLog := FluentbitLogEntry{Time: timestamp.UTC().Format(time.RFC3339)}
+	fluentBitLog := FluentbitLogEntry{TimeGenerated: timestamp.UTC().Format(time.RFC3339Nano)}
 
 	for k, v := range record {
 		key := k.(string)
