@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+func TestProcessEntries_nil_noError(t *testing.T) {
+	err := processEntries(nil, nil)
+
+	assert.NoError(t, err)
+}
+
 func TestConvertToFluentbitLogEntry_doesNotUnwrapLogEntry(t *testing.T) {
 	now := time.Now().UTC()
 	log := createSimpleLog(now)
@@ -46,6 +52,13 @@ func TestConvertToFluentbitLogEntry_handlesByteArrays(t *testing.T) {
 	assert.Equal(t, "stdout", entry.Stream)
 }
 
+func TestConvertFluentbitEntriesToJson_emptyList_returnsEmptyList(t *testing.T) {
+	entry, err := convertFluentbitEntriesToJson([]FluentbitLogEntry{})
+
+	assert.NoError(t, err)
+	assert.Len(t, entry, 0)
+}
+
 func TestConvertFluentbitEntriesToJson_returnsJsonResult(t *testing.T) {
 	log := generateDummyFluentbitLogEntry()
 	entry, err := convertFluentbitEntriesToJson([]FluentbitLogEntry{log, log})
@@ -54,7 +67,7 @@ func TestConvertFluentbitEntriesToJson_returnsJsonResult(t *testing.T) {
 	assert.Len(t, entry, 1)
 }
 
-func TestConvertFluentbitEntriesToJson_manyEntriesLargerThan1Megabyte_splitsUpResult(t *testing.T) {
+func TestConvertFluentbitEntriesToJson_normalEntriesLargerThan1Megabyte_splitsUpResult(t *testing.T) {
 	log := generateDummyFluentbitLogEntry()
 	var entriesLargerOneMb []FluentbitLogEntry
 	for range 1400 {
@@ -66,7 +79,7 @@ func TestConvertFluentbitEntriesToJson_manyEntriesLargerThan1Megabyte_splitsUpRe
 	assert.Len(t, entry, 2)
 }
 
-func TestConvertFluentbitEntriesToJson_superLargEntryThan1Megabyte_splitsUpResult(t *testing.T) {
+func TestConvertFluentbitEntriesToJson_bigEntriesLargerThan1Megabyte_splitsUpResult(t *testing.T) {
 	longLog := "[2025-05-12 12:12:27,166] {kubernetes_executor.py:380} DEBUG - self.running: {TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-keyvault-parameter-does-not-exist', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1), TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-client-id-not-exists', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1), TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-client-id-no-identity-credential', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1), TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-no-client-id', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1), TaskInstanceKey(dag_id='azurepython-secrets-fail', task_id='secrets-client-id-no-keyvault-access', run_id='scheduled__2025-05-11T00:00:00+00:00', try_number=1, map_index=-1)}"
 	longLogEntry := generateDummyFluentbitLogEntryWithLog(longLog)
 	var entriesLargerOneMb []FluentbitLogEntry
