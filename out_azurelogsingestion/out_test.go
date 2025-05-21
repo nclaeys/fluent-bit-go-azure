@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
 	mock_logs "github.com/fluent/fluent-bit-go/out_azurelogsingestion/mocks/azlogs/mock_logsclient"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -61,22 +63,43 @@ func TestConvertFluentbitEntriesToJson_emptyList_returnsEmptyList(t *testing.T) 
 
 func TestConvertFluentbitEntriesToJson_returnsJsonResult(t *testing.T) {
 	log := generateDummyFluentbitLogEntry()
-	entry, err := convertFluentbitEntriesToJson([]FluentbitLogEntry{log, log})
+	logs := []FluentbitLogEntry{log, log}
+	entry, err := convertFluentbitEntriesToJson(logs)
 
 	assert.NoError(t, err)
 	assert.Len(t, entry, 1)
+	reversed := reverseEntries(t, entry)
+	assert.Equal(t, logs, reversed)
+}
+
+func reverseEntries(t *testing.T, entries [][]byte) []FluentbitLogEntry {
+	var resultEntries []FluentbitLogEntry
+	for idx := range entries {
+		var logEntries []FluentbitLogEntry
+		err := json.Unmarshal(entries[idx], &logEntries)
+		assert.NoError(t, err)
+		resultEntries = append(resultEntries, logEntries...)
+	}
+	return resultEntries
 }
 
 func TestConvertFluentbitEntriesToJson_normalEntriesLargerThan1Megabyte_splitsUpResult(t *testing.T) {
-	log := generateDummyFluentbitLogEntry()
+	//log := generateDummyFluentbitLogEntry()
 	var entriesLargerOneMb []FluentbitLogEntry
-	for range 1400 {
+	for idx := range 1440 {
+		log := generateDummyFluentbitLogEntry()
+		log.Log = strconv.Itoa(idx) + log.Log
 		entriesLargerOneMb = append(entriesLargerOneMb, log)
 	}
-	entry, err := convertFluentbitEntriesToJson(entriesLargerOneMb)
+	entries, err := convertFluentbitEntriesToJson(entriesLargerOneMb)
 
 	assert.NoError(t, err)
-	assert.Len(t, entry, 2)
+	assert.Len(t, entries, 2)
+
+	resultEntries := reverseEntries(t, entries)
+	//Make sure that when we reverse it's the same
+	assert.Len(t, resultEntries, len(entriesLargerOneMb))
+	assert.Equal(t, entriesLargerOneMb, resultEntries)
 }
 
 func TestConvertFluentbitEntriesToJson_bigEntriesLargerThan1Megabyte_splitsUpResult(t *testing.T) {
@@ -163,6 +186,6 @@ func TestSendLogs_Success(t *testing.T) {
 
 	mockClient.EXPECT().Upload(gomock.Any(), "test-id", "test-stream", gomock.Any(), gomock.Any()).Return(azlogs.UploadResponse{}, nil)
 
-	err := operator.SendLogs(`{"log": "test message"}`)
+	err := operator.SendLogs([]byte(`{"log": "test message"}`))
 	assert.NoError(t, err)
 }
