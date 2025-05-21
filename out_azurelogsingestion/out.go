@@ -41,16 +41,16 @@ const logEntriesInOneMb = 700 // 1MB / 1500 (size of a big log entry)
 
 type FluentbitLogEntry struct {
 	TimeGenerated            string `json:"TimeGenerated"`
-	KubernetesPodName        string `json:"kubernetes_pod_name"`
-	KubernetesPodId          string `json:"kubernetes_pod_id"`
-	KubernetesNamespaceName  string `json:"kubernetes_namespace_name"`
-	KubernetesHost           string `json:"kubernetes_host"`
-	KubernetesDockerId       string `json:"kubernetes_docker_id"`
-	KubernetesContainerName  string `json:"kubernetes_container_name"`
-	KubernetesContainerImage string `json:"kubernetes_container_image"`
-	KubernetesContainerHash  string `json:"kubernetes_container_hash"`
+	KubernetesPodName        string `json:"kubernetes_pod_name,omitempty"`
+	KubernetesPodId          string `json:"kubernetes_pod_id,omitempty"`
+	KubernetesNamespaceName  string `json:"kubernetes_namespace_name,omitempty"`
+	KubernetesHost           string `json:"kubernetes_host,omitempty"`
+	KubernetesDockerId       string `json:"kubernetes_docker_id,omitempty"`
+	KubernetesContainerName  string `json:"kubernetes_container_name,omitempty"`
+	KubernetesContainerImage string `json:"kubernetes_container_image,omitempty"`
+	KubernetesContainerHash  string `json:"kubernetes_container_hash,omitempty"`
 	Log                      string `json:"log"`
-	Stream                   string `json:"stream"`
+	Stream                   string `json:"stream,omitempty"`
 }
 
 type AzureConfig struct {
