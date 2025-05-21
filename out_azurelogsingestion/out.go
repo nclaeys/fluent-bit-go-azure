@@ -16,6 +16,7 @@ package main
 
 import (
 	"C"
+	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -25,8 +26,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"slices"
-
 	"os"
 	"time"
 	"unsafe"
@@ -37,7 +36,6 @@ import (
 var azureLogOperators []*AzureOperator
 
 const oneMb = 1048576
-const logEntriesInOneMb = 700 // 1MB / 1500 (size of a big log entry)
 
 type FluentbitLogEntry struct {
 	TimeGenerated            string `json:"TimeGenerated"`
@@ -134,7 +132,7 @@ func FLBPluginFlushCtx(ctx, data unsafe.Pointer, length C.int, tag *C.char) int 
 	return output.FLB_OK
 }
 
-func processEntries(jsonEntries []string, operator *AzureOperator) error {
+func processEntries(jsonEntries [][]byte, operator *AzureOperator) error {
 	for _, jsonEntry := range jsonEntries {
 		err := operator.SendLogs(jsonEntry)
 		if err != nil {
@@ -202,7 +200,7 @@ func constructClient(config AzureConfig) logs.AzureLogsClient {
 	return client
 }
 
-func convertToJson(dec *output.FLBDecoder) ([]string, error) {
+func convertToJson(dec *output.FLBDecoder) ([][]byte, error) {
 	var entries []FluentbitLogEntry
 	for {
 		ret, ts, record := output.GetRecord(dec)
@@ -219,32 +217,42 @@ func convertToJson(dec *output.FLBDecoder) ([]string, error) {
 	return jsonEntries, nil
 }
 
-func convertFluentbitEntriesToJson(entries []FluentbitLogEntry) ([]string, error) {
+var startBytes = []byte("[")
+var endBytes = []byte("]")
+var seperatorBytes = []byte(",")
+
+func convertFluentbitEntriesToJson(entries []FluentbitLogEntry) ([][]byte, error) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
-	log.Debug().Msgf("[azurelogsingestion] converted %d logs", len(entries))
-	marshalledValue, err := json.Marshal(entries)
-	if err != nil {
-		log.Err(err).Msg("[azurelogsingestion] Failed to marshal fluentbit entries to json")
-		return nil, err
-	}
-	log.Debug().Msgf("[azurelogsingestion] size of log entry is %d", len(marshalledValue))
-	if len(marshalledValue) < oneMb {
-		return []string{string(marshalledValue)}, nil
-	}
-	log.Warn().Msg("[azurelogsingestion] Log entries size exceeds 1MB, chunking before sending to Azure")
-	var jsonValues []string
-	for chunk := range slices.Chunk(entries, logEntriesInOneMb) {
-		chunkValue, err := json.Marshal(chunk)
+	log.Warn().Msg("[azurelogsingestion] Converting logs before sending to Azure")
+	var jsonValues [][]byte
+	buf := bytes.NewBuffer([]byte{})
+	buf.Grow(oneMb)
+	for _, entry := range entries {
+		jsonValue, err := json.Marshal(entry)
 		if err != nil {
-			log.Err(err).Msg("[azurelogsingestion] Failed ot marshal chunked fluentbit entries to json")
-			return nil, err
+			log.Err(err).Msg("[azurelogsingestion] Failed to marshal fluentbit entry to json")
 		}
-		jsonValues = append(jsonValues, string(chunkValue))
+		if buf.Len() != 0 && buf.Len()+len(jsonValue)+len(endBytes) > oneMb {
+			buf.Write(endBytes)
+			jsonValuesBuff := make([]byte, buf.Len())
+			copy(jsonValuesBuff, buf.Bytes()) //We make a copy here, if we do not do this the next iteration will overwrite what we just inputted here
+			jsonValues = append(jsonValues, jsonValuesBuff)
+			buf.Reset()
+		}
+		if buf.Len() == 0 {
+			//First entry, we start the array
+			buf.Write(startBytes)
+		} else {
+			//Not the first entry, we add a seperator
+			buf.Write(seperatorBytes)
+		}
+		buf.Write(jsonValue)
 	}
-	if len(jsonValues) < 2 {
-		log.Warn().Msg("[azurelogsingestion] Chunking failed, investigate why the log lines are so large")
+	if buf.Len() > 0 {
+		buf.Write(endBytes)
+		jsonValues = append(jsonValues, buf.Bytes())
 	}
 	return jsonValues, nil
 }
@@ -322,11 +330,11 @@ func convertSafely(v interface{}) string {
 	}
 }
 
-func (a *AzureOperator) SendLogs(value string) error {
+func (a *AzureOperator) SendLogs(value []byte) error {
 	_, err := a.logsClient.Upload(context.Background(),
 		a.config.DcrImmutableId,
 		a.config.StreamName,
-		[]byte(value),
+		value,
 		nil)
 	return err
 }
