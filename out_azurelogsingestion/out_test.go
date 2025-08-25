@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
-	mock_logs "github.com/fluent/fluent-bit-go/out_azurelogsingestion/mocks/azlogs/mock_logsclient"
+	mocklogs "github.com/fluent/fluent-bit-go/out_azurelogsingestion/mocks/azlogs/mock_logsclient"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 	"strconv"
@@ -84,7 +84,6 @@ func reverseEntries(t *testing.T, entries [][]byte) []FluentbitLogEntry {
 }
 
 func TestConvertFluentbitEntriesToJson_normalEntriesLargerThan1Megabyte_splitsUpResult(t *testing.T) {
-	//log := generateDummyFluentbitLogEntry()
 	var entriesLargerOneMb []FluentbitLogEntry
 	for idx := range 1440 {
 		log := generateDummyFluentbitLogEntry()
@@ -175,7 +174,7 @@ func createSimpleLog(now time.Time) map[interface{}]interface{} {
 
 func TestSendLogs_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	mockClient := mock_logs.NewMockAzureLogsClient(ctrl)
+	mockClient := mocklogs.NewMockAzureLogsClient(ctrl)
 	operator := &AzureOperator{
 		config: AzureConfig{
 			DcrImmutableId: "test-id",
