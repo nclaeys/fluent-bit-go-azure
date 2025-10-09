@@ -225,7 +225,6 @@ func convertFluentbitEntriesToJson(entries []FluentbitLogEntry) ([][]byte, error
 	if len(entries) == 0 {
 		return nil, nil
 	}
-	log.Warn().Msg("[azurelogsingestion] Converting logs before sending to Azure")
 	var jsonValues [][]byte
 	buf := bytes.NewBuffer([]byte{})
 	buf.Grow(oneMb)
