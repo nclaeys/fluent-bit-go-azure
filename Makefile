@@ -1,6 +1,6 @@
 docker_repo := nilli9990/fluentbit-go-azure-logs-ingestion
 FLUENTBIT_VERSION := 1.9.10
-PLUGIN_VERSION := 0.0.9
+PLUGIN_VERSION := 0.1.0
 
 lint:
 	golangci-lint run
