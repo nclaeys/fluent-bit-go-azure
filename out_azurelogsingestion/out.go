@@ -36,6 +36,7 @@ import (
 var azureLogOperators []*AzureOperator
 
 const oneMb = 1048576
+const extraBufferHundredBytes = 100 //Safety margin to avoid issues between our and Azure's size calculations.
 
 type FluentbitLogEntry struct {
 	TimeGenerated            string `json:"TimeGenerated"`
@@ -233,7 +234,7 @@ func convertFluentbitEntriesToJson(entries []FluentbitLogEntry) ([][]byte, error
 		if err != nil {
 			log.Err(err).Msg("[azurelogsingestion] Failed to marshal fluentbit entry to json")
 		}
-		if buf.Len() != 0 && buf.Len()+len(jsonValue)+len(endBytes) > oneMb {
+		if buf.Len() != 0 && buf.Len()+len(jsonValue)+len(endBytes)+extraBufferHundredBytes > oneMb {
 			buf.Write(endBytes)
 			jsonValuesBuff := make([]byte, buf.Len())
 			copy(jsonValuesBuff, buf.Bytes()) //We make a copy here, if we do not do this the next iteration will overwrite what we just inputted here
