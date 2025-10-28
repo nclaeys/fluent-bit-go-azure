@@ -13,10 +13,6 @@
             "type": "string"
           },
           {
-            "name": "kubernetes_pod_id",
-            "type": "string"
-          },
-          {
             "name": "kubernetes_namespace_name",
             "type": "string"
           },
@@ -29,15 +25,7 @@
             "type": "string"
           },
           {
-            "name": "kubernetes_container_image",
-            "type": "string"
-          },
-          {
             "name": "kubernetes_container_name",
-            "type": "string"
-          },
-          {
-            "name": "kubernetes_container_hash",
             "type": "string"
           },
           {
