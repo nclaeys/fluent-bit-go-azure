@@ -39,17 +39,14 @@ const oneMb = 1048576
 const extraBufferHundredBytes = 100 //Safety margin to avoid issues between our and Azure's size calculations.
 
 type FluentbitLogEntry struct {
-	TimeGenerated            string `json:"TimeGenerated"`
-	KubernetesPodName        string `json:"kubernetes_pod_name,omitempty"`
-	KubernetesPodId          string `json:"kubernetes_pod_id,omitempty"`
-	KubernetesNamespaceName  string `json:"kubernetes_namespace_name,omitempty"`
-	KubernetesHost           string `json:"kubernetes_host,omitempty"`
-	KubernetesDockerId       string `json:"kubernetes_docker_id,omitempty"`
-	KubernetesContainerName  string `json:"kubernetes_container_name,omitempty"`
-	KubernetesContainerImage string `json:"kubernetes_container_image,omitempty"`
-	KubernetesContainerHash  string `json:"kubernetes_container_hash,omitempty"`
-	Log                      string `json:"log"`
-	Stream                   string `json:"stream,omitempty"`
+	TimeGenerated           string `json:"TimeGenerated"`
+	KubernetesPodName       string `json:"kubernetes_pod_name,omitempty"`
+	KubernetesNamespaceName string `json:"kubernetes_namespace_name,omitempty"`
+	KubernetesHost          string `json:"kubernetes_host,omitempty"`
+	KubernetesDockerId      string `json:"kubernetes_docker_id,omitempty"`
+	KubernetesContainerName string `json:"kubernetes_container_name,omitempty"`
+	Log                     string `json:"log"`
+	Stream                  string `json:"stream,omitempty"`
 }
 
 type AzureConfig struct {
@@ -298,8 +295,6 @@ func convertKubernetesProperties(m map[interface{}]interface{}, f *FluentbitLogE
 		switch keyAsString {
 		case "pod_name":
 			f.KubernetesPodName = convertSafely(v)
-		case "pod_id":
-			f.KubernetesPodId = convertSafely(v)
 		case "namespace_name":
 			f.KubernetesNamespaceName = convertSafely(v)
 		case "host":
@@ -308,10 +303,6 @@ func convertKubernetesProperties(m map[interface{}]interface{}, f *FluentbitLogE
 			f.KubernetesDockerId = convertSafely(v)
 		case "container_name":
 			f.KubernetesContainerName = convertSafely(v)
-		case "container_image":
-			f.KubernetesContainerImage = convertSafely(v)
-		case "container_hash":
-			f.KubernetesContainerHash = convertSafely(v)
 		default:
 			log.Debug().Msgf("[azurelogsingestion] Unknown kubernetes record key: %s", keyAsString)
 		}
