@@ -1,6 +1,8 @@
 module github.com/fluent/fluent-bit-go/out_azurelogsingestion
 
-go 1.24.0
+go 1.25.0
+
+toolchain go1.25.3
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0
